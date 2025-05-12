@@ -8,8 +8,8 @@ from static_schedule.offline_scheduler import Scheduler
 from static_schedule.worst_fit_scheduler import WorstFitScheduler
 from util.logger import init_logger, logger
 
-input_dir = '../data/input'
-output_dir = '../data/plan'
+input_dir = '/Users/amethyst/PycharmProjects/affinity-schedule/data/input'
+output_dir = '/Users/amethyst/PycharmProjects/affinity-schedule/data/plan'
 
 init_logger()
 
@@ -24,6 +24,7 @@ def test_best_fit_schedule():
 
     ### check
     plan = scheduler.check_and_gen(scheduler, _plan)
+    scheduler.check_and_output(scheduler, output_dir, _plan)
 
     logger.info(f'generating plan has done')
     for single_plan in plan:
@@ -40,6 +41,7 @@ def test_first_fit_schedule():
     _plan = scheduler.schedule()
     ### check
     plan = scheduler.check_and_gen(scheduler, _plan)
+    scheduler.check_and_output(scheduler, output_dir, _plan)
 
     logger.info(f'generating plan has done')
     for single_plan in plan:
@@ -54,9 +56,10 @@ def test_multi_stage_fit_schedule():
     ### schedule
     _plan = scheduler.schedule(enable_draw=True)
 
-    ### check
+
     ### check
     plan = scheduler.check_and_gen(scheduler, _plan)
+    scheduler.check_and_output(scheduler, output_dir, _plan)
 
     logger.info(f'generating plan has done')
     for single_plan in plan:

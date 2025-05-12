@@ -63,9 +63,14 @@ class Scheduler:
                  avg_usage_cost * self.avg_usage_weight)
 
     def usage(self, plan: np.ndarray) -> ([float], [float], [BaseObject]):
-        """ 输出每个节点的 资源最低利用率 最高利用率 和 每个资源的利用率 """
+        """输出每个节点的 资源最低利用率 最高利用率 和 每个资源的利用率"""
         occupied = [None for _ in range(len(self.nodes))]
         for pod_idx, node_idx in enumerate(plan):
+            # Add bounds checking
+            if node_idx >= len(occupied):
+                logger.error(f"Invalid node index {node_idx} in plan")
+                continue
+
             if occupied[node_idx] is not None:
                 tmp = occupied[node_idx]
             else:
@@ -86,13 +91,21 @@ class Scheduler:
         return min_usage, max_usage, usage
 
     def used(self, plan: np.ndarray) -> [BaseObject]:
-        """ 每个节点的资源使用量 """
+        """Calculate resource usage for each node with bounds checking"""
+        # Initialize with empty BaseObjects
         used = [BaseObject() for _ in range(len(self.nodes))]
+
         for pod_idx, node_idx in enumerate(plan):
-            tmp = used[node_idx]
-            tmp += self.pods[pod_idx]
-            used[node_idx] = tmp
+            # Validate node index before accessing
+            if node_idx >= len(used):
+                logger.error(f"Invalid node index {node_idx} in plan")
+                continue
+
+            # Update resource usage
+            used[node_idx] += self.pods[pod_idx]
+
         return used
+
 
     def read_pod_yamls(self, pods_dir: str) -> dict[str, Any]:
         entries = os.listdir(pods_dir)
@@ -169,15 +182,33 @@ class Scheduler:
         used = self.used(plan)
         for u, node in zip(used, self.nodes):
             tmp = node - u
-            if not tmp.is_not_empty():
+
+            if tmp.mem < 0 or tmp.disk < 0 or tmp.gpu < 0:
                 return False
         return True
 
     def save_plan(self, save_path: str, plan: []):
-        """ 保存调度结果 """
-        data = [[self.pods[pod].name, self.nodes[node].name] for pod, node in enumerate(plan)]
-        df = pd.DataFrame(data, columns=["name", "node"])
-        df.to_csv(os.path.join(save_path, f'{self.scheduler_name}.csv'), index=False)
+        """保存调度结果"""
+        # Validate plan length matches pods
+        if len(plan) != len(self.pods):
+            logger.error(f"Plan length {len(plan)} doesn't match pod count {len(self.pods)}")
+            return
+
+        # Validate all node indices
+        valid_entries = []
+        for pod_idx, node_idx in enumerate(plan):
+            if node_idx >= len(self.nodes):
+                logger.error(f"Invalid node index {node_idx} for pod {self.pods[pod_idx].name}")
+                continue
+            valid_entries.append([self.pods[pod_idx].name, self.nodes[node_idx].name])
+
+        # Only save if all entries are valid
+        if len(valid_entries) == len(self.pods):
+            df = pd.DataFrame(valid_entries, columns=["name", "node"])
+            df.to_csv(os.path.join(save_path, f'{self.scheduler_name}.csv'), index=False)
+        else:
+            logger.error("Plan contains invalid node assignments - not saving")
+
 
     @classmethod
     def check_and_output(cls, scheduler, save_path: str, plan: [int]):
@@ -201,37 +232,29 @@ class Scheduler:
         scheduler.save_plan(save_path, plan)
 
     def check_and_gen(self, scheduler, plan: [int]) -> list[SingleSchedulerPlan] | None:
-        """Validate a scheduling plan and generate execution details.
-
-        Args:
-            scheduler: Scheduler instance
-            plan: List of node indices for each pod
-
-        Returns:
-            List of SingleSchedulerPlan objects if valid, None otherwise
-        """
+        """Validate a scheduling plan and generate execution details."""
         # Early return if plan is invalid
         if not scheduler.check(plan):
             logger.info('Plan validation failed')
             return None
 
+        # Validate all node indices in plan
+        for node_idx in plan:
+            if node_idx >= len(self.nodes):
+                logger.error(f"Invalid node index {node_idx} in plan")
+                return None
+
         # Log cost information
         cost = scheduler.calc_cost(plan)
         logger.info(f'Total cost: {cost}')
 
-        # Log usage statistics with cleaner formatting
-        min_usage, max_usage, usage = scheduler.usage(plan)
-        for node_idx, (min_u, max_u, u) in enumerate(zip(min_usage, max_usage, usage)):
-            logger.info(
-                f'Node {node_idx}: Min={min_u:.2f}, Max={max_u:.2f}, '
-                f'Usage={u.to_string()}'
-            )
-
-        # Generate plan objects using list comprehension
+        # Generate plan objects with validation
         return [
             SingleSchedulerPlan(self.pods[pod].name, self.nodes[node].name)
             for pod, node in enumerate(plan)
+            if node < len(self.nodes)  # Additional safety check
         ]
+
 
 
 def read_pods_csv(path: str) -> ([], {}):

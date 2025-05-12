@@ -149,7 +149,7 @@ def get_model() -> model.DQN:
     return dqn
 
 
-def dynamic_schedule(input_dir: str, affinity) -> list[SingleSchedulerPlan]:
+def dynamic_schedule(input_dir: str, affinity, output_dir: str) -> list[SingleSchedulerPlan]:
     """Optimized dynamic scheduling function with improved efficiency and readability."""
     # Constants for file names
     NODES_RESOURCE_FILE = 'node_resource.csv'
@@ -166,6 +166,8 @@ def dynamic_schedule(input_dir: str, affinity) -> list[SingleSchedulerPlan]:
     # Use list for faster string building
     plan = []
     warning_count = 0
+
+    res = "name,node\n"
 
     with open(f'{input_dir}/{TASKS_FILE}', 'r', newline='') as csvfile:
         reader = csv.reader(csvfile)
@@ -192,12 +194,16 @@ def dynamic_schedule(input_dir: str, affinity) -> list[SingleSchedulerPlan]:
             update_nodes(nodes, scheduled_node, cpu, memory, gpu, disk, name)
 
             plan.append(SingleSchedulerPlan(name, scheduled_node))
+            res += f'{name},{scheduled_node}\n'
 
         elapsed = time.perf_counter() - start_time
         print(f'Processed {len(plan)} agents in {elapsed:.3f}s')
 
     if warning_count:
         logger.warning(f'{warning_count} agents failed scheduling due to resource constraints')
+
+    with open(output_dir, 'w') as file:
+        file.write(res)
 
     return plan  # Efficient string concatenation
 

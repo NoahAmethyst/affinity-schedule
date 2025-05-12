@@ -1,4 +1,5 @@
 """ 多阶段调度 """
+import json
 import os
 import matplotlib
 import numpy as np
@@ -7,10 +8,10 @@ from numpy import ndarray
 import matplotlib.pyplot as plt
 import scipy.cluster.hierarchy as sch
 from scipy.cluster.hierarchy import is_valid_linkage
+from scipy.optimize._lsap import linear_sum_assignment
 
 from affinity.resource import BaseNode, BasePod, BaseObject
 from static_schedule.offline_scheduler import Scheduler
-from scipy.optimize import linear_sum_assignment
 import copy
 
 from util.logger import logger
@@ -18,10 +19,10 @@ from util.logger import logger
 
 class MultiStageScheduler(Scheduler):
     ### fine_tuning 节点利用率最大差值
-    fine_tuning_max_diff = 0.1
+    fine_tuning_max_diff = 100
 
-    def __init__(self, input_path: str,pod_affinity,node_affinity):
-        super().__init__(input_path,pod_affinity,node_affinity)
+    def __init__(self, input_path: str, pod_affinity, node_affinity):
+        super().__init__(input_path, pod_affinity, node_affinity)
         self.scheduler_name = "multi_stage_scheduler"
         self.enable_drawing = False
 
@@ -30,21 +31,25 @@ class MultiStageScheduler(Scheduler):
             self.draw_init()
         ### 聚类
         clusters, cluster_sum, affinity = self.gpu_cluster()
-        ### 映射
-        # clusters = self.first_fit_mapper(clusters)
-        clusters = self.mapper(clusters)
-        ### 调整
+
+        ### 映射到Node
+        clusters = self.first_fit_mapper(clusters)
+        # clusters = self.mapper(clusters)
+        ### 超过节点资源的重新分配
         clusters = self.fine_tuning(clusters)
+
         ### 获得结果
         plan = self.cluster_to_plan(clusters)
         return plan
 
     def gpu_cluster(self):
         ### 超参数
-        gpu_node_num = 3
-        max_obj = BaseNode("", 64, 1024 * 1024, 24 * 1024, 1.5 * 1024 * 1024, 10000)
-        max_gpu_pod_per_node = 19
-        max_normal_pod_per_node = 11
+        gpu_node_num = 0
+        # 簇最大资源限制
+        max_obj = BaseNode("", 45, 240 * 1024, 0 * 1024,1572864, 10000)
+
+        max_gpu_pod_per_node = 0
+        max_normal_pod_per_node = 17
 
         ### 先根据gpu进行聚类
         gpu_affinity = np.copy(self.pod_affinity)
@@ -77,16 +82,20 @@ class MultiStageScheduler(Scheduler):
                 if affinity[i, j] < 0:
                     affinity[i, j] = -affinity[i, j]
         n_cluster = len(self.nodes)
+
         clusters, cluster_sum, affinity = self.cluster(
-            n_cluster,
-            affinity,
-            cluster_sum,
-            max_obj,
+            n_cluster=n_cluster,
+            affinity=affinity,
+            cluster_sum=cluster_sum,
+            max_obj=max_obj,
             draw=self.draw_merge,
             max_num=max_normal_pod_per_node,
             exclude=None,
             clusters=clusters,
         )
+        # print(len(clusters))
+        # print([pod.__dict__ for pod in cluster_sum])
+
         return clusters, cluster_sum, affinity
 
     def first_fit_mapper(self, clusters: [[int]]):
@@ -130,10 +139,17 @@ class MultiStageScheduler(Scheduler):
         return result
 
     def fine_tuning(self, clusters: [[int]]):
-        """ 基于贪心算法的调整策略 todo """
+        """ 基于贪心算法的调整策略  """
 
         def cost_f(used: [BaseNode], clusters: [[int]]) -> float:
-            max_usage = [self.nodes[i].max_usage(u) for i, u in enumerate(used)]
+            # max_usage = [self.nodes[i].max_usage(u) for i, u in enumerate(used)]
+            max_usage = []  # 初始化空列表用于存储结果
+            for i, u in enumerate(used):  # 遍历 used 列表及其索引
+                if i >= len(self.nodes):
+                    i -= len(self.nodes)
+                node_max_usage = self.nodes[i].max_usage(u)  # 调用节点的 max_usage 方法
+                max_usage.append(node_max_usage)  # 将结果添加到列表中
+
             plan = self.cluster_to_plan(clusters)
 
             affinity_cost = self.affinity(plan) * self.affinity_weight
@@ -146,6 +162,8 @@ class MultiStageScheduler(Scheduler):
         used = []
         usage = np.array(list(range(len(clusters))))
         for i, cluster in enumerate(clusters):
+            if i >= len(self.nodes):
+                i -= len(self.nodes)
             s = BasePod()
             for pod_idx in cluster:
                 s += self.pods[pod_idx]
@@ -157,7 +175,7 @@ class MultiStageScheduler(Scheduler):
             sorted_indices = np.argsort(usage)
             from_idx = -1  # 找到最大的不被exclude的from_idx
             for i in range(len(clusters) - 1, -1, -1):
-                if not exclude_node[from_idx]:
+                if not exclude_node[sorted_indices[i]]:
                     from_idx = sorted_indices[i]
                     break
             if from_idx == -1:
@@ -174,8 +192,9 @@ class MultiStageScheduler(Scheduler):
                 ### 从from_idx 迁移一个pod到to_idx
                 for pod_idx in clusters[from_idx]:
                     ### 迁移pod
-                    new_clusters[from_idx].remove(pod_idx)
-                    new_clusters[to_idx].append(pod_idx)
+                    if pod_idx in new_clusters:
+                        new_clusters[from_idx].remove(pod_idx)
+                        new_clusters[to_idx].append(pod_idx)
                     ### 计算新cost
                     new_cost = cost_f(used, new_clusters)
                     from_used = used[from_idx] - self.pods[pod_idx]

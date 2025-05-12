@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: agent-service-monitor
+  labels:
+    release: monitor
+spec:
+  endpoints:
+  - interval: 10s  # 指标抓取间隔时间，可根据需求调整
+    port: metrics  # 与 Service 中暴露指标的端口名称一致
+    path: /metrics
+    scheme: http
+  jobLabel: agent-service-monitor  # 使用 app 标签作为 job 的标识，与 Service 和 Pod 的 app 标签对应
+  namespaceSelector:
+    matchNames:
+    - default  # 根据实际情况修改为 Service 和 Pod 所在的命名空间
+  selector:
+    matchLabels:
+      app: agents  # 与 Service 和 Pod 的 app 标签一致，用于选择对应的 Service

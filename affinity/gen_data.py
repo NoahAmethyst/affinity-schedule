@@ -8,16 +8,16 @@ from affinity.resource import BasePod, BaseNode, BasePlatform, Communication
 def gen_base_pods() -> list[list[BasePod]]:
     return [
         [
-            BasePod("", 2, 4, 1 * 1024, 2 * 1024, None),  # 感知
-            BasePod("", 3, 5, 1 * 1024, 2 * 1024, None),  # 感知
-            BasePod("", 3, 6, 1 * 1024, 2 * 1024, None),  # 感知
-            BasePod("", 4, 7, 1 * 1024, 2 * 1024, None),  # 感知
+            BasePod("", 2, 4, 0 * 1024, 2 * 1024, None),  # 感知
+            BasePod("", 3, 5, 0 * 1024, 2 * 1024, None),  # 感知
+            BasePod("", 3, 6, 0 * 1024, 2 * 1024, None),  # 感知
+            BasePod("", 4, 7, 0 * 1024, 2 * 1024, None),  # 感知
         ],
         [
-            BasePod("", 1, 4, 1 * 1024, 1 * 1024, None),  # 认知
-            BasePod("", 2, 3, 2 * 1024, 1 * 1024, None),  # 认知
-            BasePod("", 1, 2, 2 * 1024, 1 * 1024, None),  # 认知
-            BasePod("", 2, 1, 3 * 1024, 1 * 1024, None),  # 认知
+            BasePod("", 1, 4, 0 * 1024, 1 * 1024, None),  # 认知
+            BasePod("", 2, 3, 0 * 1024, 1 * 1024, None),  # 认知
+            BasePod("", 1, 2, 0 * 1024, 1 * 1024, None),  # 认知
+            BasePod("", 2, 1, 0 * 1024, 1 * 1024, None),  # 认知
         ],
         [
             BasePod("", 2, 9, 0, 2 * 1024, None),  # 行动
@@ -36,8 +36,8 @@ def gen_base_pods() -> list[list[BasePod]]:
 
 def gen_base_nodes() -> list[BaseNode]:
     return [
-        BaseNode("", 64, 240, 0, 1.5 * 1024 * 1024, 10000),  #
-        BaseNode("", 64, 240, 1024 * 24, 1.5 * 1024 * 1024, 10000),  # gpu
+        BaseNode("", 32, 240, 0, 1.5 * 1024 * 1024, 10000),  #
+        BaseNode("", 32, 240, 1024 * 24, 1.5 * 1024 * 1024, 10000),  # gpu
     ]
 
 
@@ -47,10 +47,10 @@ def gen_base_communication() -> tuple[list[int], list[list[list[int]]]]:
     return (
         [5, 1, times],  # 指挥关系通信
         [
-            [[10, 50, times], [13, 30, times], [20, 40, times]],  # 智能体通信
-            [[10, 60, times], [12, 40, times], [15, 30, times]],
-            [[10, 70, times], [11, 50, times], [15, 40, times]],
-            [[10, 80, times], [10, 60, times], [20, 30, times]],
+            [[5, 1, times], [7, 1, times], [10, 1, times]],  # 智能体通信
+            [[5, 1, times], [6, 1, times], [8, 1, times]],
+            [[10, 3, times], [10, 5, times], [10, 4, times]],
+            [[1, 7, times], [1, 9, times], [1, 8, times]],
         ]
     )
 
@@ -203,7 +203,7 @@ def save_resource(pods: list[BasePod], nodes: list[BaseNode], platforms: list[Ba
 if __name__ == '__main__':
     ### 生成测试数据
     save_path = ('/Users/amethyst/PycharmProjects/affinity-schedule/data/input')
-    pods, comm, platform = gen_pods(1000)
-    nodes = gen_nodes(5, 3)
+    pods, comm, platform = gen_pods(50)
+    nodes = gen_nodes(8, 3)
     save_resource(pods, nodes, platform, save_path)
     save_communication(comm, save_path)
