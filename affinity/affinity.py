@@ -29,87 +29,99 @@ class ScenType(Enum):
 
 
 def gen_node_name(pod: BasePod, scene_type: ScenType):
-    if 'center' in pod.name:
+    name = pod.name
+
+    # Common case for all scene types
+    if 'center' in name:
         return '任务指挥中心'
-    if scene_type == ScenType.MINE_CLEAR:
-        if 'node' in pod.name:
-            if '1' in pod.name:
-                return f'艇群反水雷任务规划'
-            if '2' in pod.name:
-                return '无人艇群编队控制'
-        if 'equipt' in pod.name:
-            _id = int(pod.name.replace('equipt-', ''))
-            if 1 < _id < 10:
-                return f'无人艇航行控制-{_id}'
-            if 11 < _id < 20:
-                return f'灭雷行动-{_id}'
-            if 21 < _id < 30:
-                return f'无人艇声学识别-{_id}'
-            else:
-                return f'投弹灭雷-{_id}'
-        if 'aigc' in pod.name:
-            _id = int(pod.name.replace('aigc-', ''))
-            return f'AIGC声学模型-{_id}'
-    elif scene_type==ScenType.ANTI_UNDISTRIBUTED_1:
-        if 'node' in pod.name:
-            if '1' in pod.name:
-                return f'艇群信息融合'
-            if '2' in pod.name:
-                return '艇群反无人袭扰任务规划'
-            if '3' in pod.name:
-                return '无人艇编队控制'
-        if 'equipt' in pod.name:
-            _id = int(pod.name.replace('equipt-', ''))
-            if 1 < _id < 10:
-                return f'单艇信息融合-{_id}'
-            if 11 < _id < 20:
-                return f'无人艇航行控制-{_id}'
-            if 21 < _id < 30:
-                return f'作战行动-{_id}'
-            if 31 < _id < 40:
-                return f'无人艇光学感知-{_id}'
-            if 41 < _id < 50:
-                return f'无人艇红外感知-{_id}'
-            else:
-                return f'无人机光学识别-{_id}'
-        if 'aigc' in pod.name:
-            _id = int(pod.name.replace('aigc-', ''))
-        if 1 < _id < 10:
-            return f'AIGC光学生成-{_id}'
-        if 11 < _id < 20:
-            return f'AIGC红外转换-{_id}'
-        else:
-            return f'AIGC无人机光学-{_id}'
-    elif scene_type==ScenType.ANTI_UNDISTRIBUTED_2:
-        if 'node' in pod.name:
-            if '1' in pod.name:
-                return f'反无人袭扰任务规划'
-            if '2' in pod.name:
-                return '飞行控制'
-        if 'equipt' in pod.name:
-            _id = int(pod.name.replace('equipt-', ''))
-            if 0 < _id < 3:
-                return f'无人机信息融合-{_id}'
-            if 2 < _id < 5:
-                return f'无人机雷达识别-{_id}'
-            if 4 < _id < 7:
-                return f'无人机可见光识别-{_id}'
-            if 6 < _id < 8:
-                return f'作战行动-{_id}'
-            else:
-                return f'作战行动-{_id}'
-        if 'aigc' in pod.name:
-            _id = int(pod.name.replace('aigc-', ''))
-        if 0 < _id < 3:
-            return f'AIGC光学生成-{_id}'
-        if 2 < _id < 5:
-            return f'AIGC雷达转换-{_id}'
-        if 4 < _id < 7:
-            return f'AIGC红外转换-{_id}'
-        else:
-            return f'AIGC光学生成-{_id}'
-    else:
-        return pod.name
+
+    # Scene-specific mappings
+    scene_mappings = {
+        ScenType.MINE_CLEAR: {
+            'node': {
+                '1': '艇群反水雷任务规划',
+                '2': '无人艇群编队控制'
+            },
+            'equipt': {
+                (1, 10): '无人艇航行控制-{}',
+                (11, 20): '灭雷行动-{}',
+                (21, 30): '无人艇声学识别-{}',
+                'default': '投弹灭雷-{}'
+            },
+            'aigc': lambda _id: f'AIGC声学模型-{_id}'
+        },
+        ScenType.ANTI_UNDISTRIBUTED_1: {
+            'node': {
+                '1': '艇群信息融合',
+                '2': '艇群反无人袭扰任务规划',
+                '3': '无人艇编队控制'
+            },
+            'equipt': {
+                (1, 10): '单艇信息融合-{}',
+                (11, 20): '无人艇航行控制-{}',
+                (21, 30): '作战行动-{}',
+                (31, 40): '无人艇光学感知-{}',
+                (41, 50): '无人艇红外感知-{}',
+                'default': '无人机光学识别-{}'
+            },
+            'aigc': {
+                (1, 10): 'AIGC光学生成-{}',
+                (11, 20): 'AIGC红外转换-{}',
+                'default': 'AIGC无人机光学-{}'
+            }
+        },
+        ScenType.ANTI_UNDISTRIBUTED_2: {
+            'node': {
+                '1': '反无人袭扰任务规划',
+                '2': '飞行控制'
+            },
+            'equipt': {
+                (0, 3): '无人机信息融合-{}',
+                (2, 5): '无人机雷达识别-{}',
+                (4, 7): '无人机可见光识别-{}',
+                'default': '作战行动-{}'
+            },
+            'aigc': {
+                (0, 3): 'AIGC光学生成-{}',
+                (2, 5): 'AIGC雷达转换-{}',
+                (4, 7): 'AIGC红外转换-{}',
+                'default': 'AIGC光学生成-{}'
+            }
+        }
+    }
+
+    # Get the mapping for current scene type
+    mapping = scene_mappings.get(scene_type, {})
+
+    # Check for node patterns
+    if 'node' in name:
+        for prefix, node_name in mapping.get('node', {}).items():
+            if prefix in name:
+                return node_name
+
+    # Check for equipment patterns
+    if 'equipt' in name:
+        _id = int(name.replace('equipt-', ''))
+        for (start, end), eq_name in mapping.get('equipt', {}).items():
+            if isinstance(start, int) and start < _id < end:
+                return eq_name.format(_id)
+        return mapping.get('equipt', {}).get('default', '{}').format(_id)
+
+    # Check for AIGC patterns
+    if 'aigc' in name:
+        _id = int(name.replace('aigc-', ''))
+        aigc_mapping = mapping.get('aigc', {})
+
+        if callable(aigc_mapping):
+            return aigc_mapping(_id)
+
+        for (start, end), aigc_name in aigc_mapping.items():
+            if isinstance(start, int) and start < _id < end:
+                return aigc_name.format(_id)
+        return aigc_mapping.get('default', '{}').format(_id)
+
+    # Default case
+    return name
 
 
 def graph_to_tree(G, root_node=None):

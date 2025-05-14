@@ -66,7 +66,7 @@ def test_multi_stage_fit_schedule():
         logger.info(f'{single_plan.__dict__}')
 
     ### draw
-    scheduler.draw('../data/others')
+    # scheduler.draw('../data/others')
 
 
 def test_worst_fit_schedule():
