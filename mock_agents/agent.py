@@ -1,4 +1,3 @@
-import logging
 import multiprocessing
 import threading
 import time
@@ -10,32 +9,31 @@ PORT = 11111
 
 
 class Agent:
-    def __init__(self, cpu: int, memory: int, frequency: float, package: int, target: str, amount: int,
-                 logger: logging.Logger) -> None:
+    def __init__(self, cpu: int, memory: int, frequency: float, package: int, target: str, amount: int) -> None:
         self.cpu = cpu
         self.memory = memory
         self.frequency = frequency
         self.package = package
         self.target = target
         self.amount = amount
-        self.logger = logger
+
         self.stop_event = multiprocessing.Event()
 
         self.busy_processes = new_busy_tasks(cpu, self.stop_event)
-        logger.info("init the busy processes successfully")
+        print("init the busy processes successfully")
 
         self.busy_memory = new_busy_memory(memory)
-        logger.info("init the busy memory successfully")
+        print("init the busy memory successfully")
 
         self.new_listen_process()
-        logger.info("init the socket server successfully")
+        print("init the socket server successfully")
 
         if len(self.target) > 0:
             self.new_seed_process()
-            logger.info("init the socket client successfully")
+            print("init the socket client successfully")
 
     def run(self) -> None:
-        self.logger.info("start to run agent")
+        print("start to run agent")
 
         for process in self.busy_processes:
             process.start()
@@ -67,7 +65,7 @@ class Agent:
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.connect((self.target, PORT))
 
-                    self.logger.info(
+                    print(
                         f"connected and start to send messages to {self.target}:{PORT} at {self.frequency} package/s, package size {self.package} MB.")
 
                     packet = b'x' * packet_size_bytes + b'e'
@@ -90,12 +88,12 @@ class Agent:
                         time.sleep(1 / self.frequency)  # 根据频率控制发送间隔
 
                     if not self.stop_event.is_set():
-                        self.logger.info("agent has finished send task")
+                        print("agent has finished send task")
                         break
 
 
                 except Exception as e:
-                    self.logger.error(f'seed messsages failed: {e}')
+                    print(f'seed messsages failed: {e}')
                 finally:
                     sock.close()
                     time.sleep(1)
@@ -116,7 +114,7 @@ class Agent:
                         break
 
             except Exception as e:
-                self.logger.error(f'process received data failed: {e}')
+                print(f'process received data failed: {e}')
             finally:
                 conn.close()
 
@@ -126,7 +124,7 @@ class Agent:
                 sock.bind(("0.0.0.0", PORT))
                 sock.listen(5)  # 开始监听，允许最多5个连接同时等待
 
-                self.logger.info(f'start to listen on 0.0.0.0:{PORT}')
+                print(f'start to listen on 0.0.0.0:{PORT}')
 
                 while True:
                     if self.stop_event.is_set():
@@ -134,13 +132,13 @@ class Agent:
 
                     conn, addr = sock.accept()
 
-                    self.logger.info(f'get connected from {addr}')
+                    print(f'get connected from {addr}')
 
                     client_thread = threading.Thread(target=process_reveived_message, args=(conn, addr))
                     client_thread.start()
 
             except Exception as e:
-                self.logger.error(f'start socket server failed: {e}')
+                print(f'start socket server failed: {e}')
             finally:
                 sock.close()
 

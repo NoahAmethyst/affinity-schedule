@@ -3,7 +3,6 @@ import logging
 import agent
 import signal
 
-from util.logger import init_logger, logger
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='please enter the configuration of the intelligent agent')
@@ -20,7 +19,7 @@ if __name__ == "__main__":
     print(f'init args: {args}')
     print("start to init the agent")
 
-    my_agent = agent.Agent(args.cores, args.memory, args.frequency, args.package, args.target, args.amount, logger)
+    my_agent = agent.Agent(args.cores, args.memory, args.frequency, args.package, args.target, args.amount)
 
     signal.signal(signal.SIGTERM, my_agent.stop)
 
