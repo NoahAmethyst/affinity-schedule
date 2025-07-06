@@ -15,8 +15,6 @@ def test_dynamic_schedule():
     plan = dynamic_schedule(input_dir, pod_affinity,output_dir)
 
 
-
-
     logger.info('generating dynamic schedule plan done')
     print(f'dynamic scheduler plan is:{plan}')
 

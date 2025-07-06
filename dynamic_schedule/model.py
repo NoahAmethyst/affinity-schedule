@@ -1,14 +1,19 @@
+import time
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 
 # 自定义一个简单环境示例（仅用于演示，实际可替换为真实环境）
-class CustomEnv:
+class TrainEnv:
     def __init__(self):
         self.n = 8
         self.state = self.generate_state()  
         self.done = False
+        print('加载历史数据，构建训练环境')
+
+
 
     def reset(self):
         self.state = self.generate_state()
@@ -95,8 +100,9 @@ class DQN(nn.Module):
 
 
 if __name__ == "__main__":
-    # 创建环境实例
-    env = CustomEnv()
+    print('准备训练环境')
+    # 创建环境实例,加载历史数据
+    env = TrainEnv()
     n = env.n  # 获取环境中定义的n值
 
     # 创建主网络和目标网络
@@ -114,7 +120,12 @@ if __name__ == "__main__":
 
     # 训练循环
     step_counter = 0
-    for episode in range(10000):
+
+    round=500
+    print(f'设置训练轮次：{round}')
+
+    print('开始训练')
+    for episode in range(round):
         state = env.reset()
         state_tensor = torch.FloatTensor(state)
         done = False
@@ -160,13 +171,19 @@ if __name__ == "__main__":
             if step_counter % TARGET_UPDATE_FREQ == 0:
                 target_net.load_state_dict(policy_net.state_dict())
 
-        print(f'Episode: {episode}, Reward: {episode_reward}')
+        print(f'第: {episode}轮训练, 奖励: {episode_reward}')
         if EPSILON > EPSILON_MIN:
             EPSILON *= EPSILON_DECAY
 
+        time.sleep(1)
+
+    print('模型训练结束')
     # 测试环节
-    test_episodes = 10
-    for _ in range(test_episodes):
+
+    test_episodes = 100
+
+    print(f'开始进行模型测试，轮次{test_episodes}')
+    for i in range(test_episodes):
         state = env.reset()
         state = torch.FloatTensor(state)
         done = False
@@ -180,12 +197,15 @@ if __name__ == "__main__":
             next_state = torch.FloatTensor(next_state)
             episode_reward += reward
             state = next_state
-        print(f'Test Episode Reward: {episode_reward}')
+        print(f'测试，轮次{test_episodes}, 奖励: {episode_reward}')
+        time.sleep(1)
 
     # 保存模型
+    print('测试结束，保存模型')
     torch.save(policy_net.state_dict(), 'model.pth')
     
     # 加载模型
+    print('模型结构：')
     model = DQN(env.n)
     model.load_state_dict(torch.load('model.pth'))
     state = env.reset()

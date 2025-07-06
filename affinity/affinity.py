@@ -100,12 +100,17 @@ def gen_node_name(pod: BasePod, scene_type: ScenType):
                 return node_name
 
     # Check for equipment patterns
+    # Check for equipment patterns
     if 'equipt' in name:
         _id = int(name.replace('equipt-', ''))
-        for (start, end), eq_name in mapping.get('equipt', {}).items():
-            if isinstance(start, int) and start < _id < end:
+        for key, eq_name in mapping.get('equipt', {}).items():
+            if key == 'default':
+                continue  # Skip default case here, handle after loop
+            if isinstance(key, tuple) and key[0] < _id < key[1]:
                 return eq_name.format(_id)
+        # Handle default case after checking all ranges
         return mapping.get('equipt', {}).get('default', '{}').format(_id)
+
 
     # Check for AIGC patterns
     if 'aigc' in name:

@@ -1,6 +1,6 @@
 name,cpu,memory,gpu,disk,platform
-pod-10,1,4,1024,1024,platform-3
-pod-38,1,4,1024,1024,platform-10
-pod-52,3,10,0,2048,platform-13
-pod-72,3,10,0,3072,platform-21
-pod-61,3,10,0,3072,platform-21
+equipt-1,1,4,1024,1024,platform-3
+equipt-2,1,4,1024,1024,platform-10
+equipt-3,3,10,0,2048,platform-13
+equipt-5,3,10,0,3072,platform-21
+equipt-6,3,10,0,3072,platform-21

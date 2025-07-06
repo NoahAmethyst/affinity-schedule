@@ -11,8 +11,8 @@ from dynamic_schedule import model
 from util import logger
 from util.logger import init_logger, logger
 
-NODE_COUNT = 8
-NODE_NAME = ['node-1', 'node-2', 'node-3', 'node-4', 'node-5', 'node-6', 'node-7', 'node-8']
+NODE_COUNT = 5
+NODE_NAME = ['node-1', 'node-2', 'node-3', 'node-4', 'node-5']
 
 
 class Node:
@@ -144,7 +144,7 @@ def update_nodes(nodes: dict[str:Node], scheduled_node: str, cpu, memory, gpu, d
 
 
 def get_model() -> model.DQN:
-    dqn = model.DQN(NODE_COUNT)
+    dqn = model.DQN(8)
     dqn.load_state_dict(torch.load('model.pth'))
     return dqn
 

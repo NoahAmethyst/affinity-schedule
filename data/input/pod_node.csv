@@ -1,6 +1,6 @@
 node,agents
-node-1,"pod-5,pod-8,pod-16,pod-19,pod-21,pod-31,pod-34,pod-37,pod-43,pod-44,pod-47,pod-50,pod-53,pod-58"
-node-2,"pod-9,pod-17,pod-20,pod-24,pod-26,pod-30,pod-40,pod-48,pod-49,pod-54,pod-56,pod-57,pod-63,pod-69,pod-71"
-node-3,"pod-7,pod-10,pod-11,pod-22,pod-23,pod-25,pod-28,pod-38,pod-41,pod-51,pod-52,pod-60,pod-61,pod-64,pod-65"
-node-4,"pod-1,pod-13,pod-27,pod-33,pod-35,pod-39,pod-42,pod-45,pod-46,pod-59,pod-62,pod-67,pod-68,pod-70,pod-72"
-node-5,"pod-2,pod-3,pod-4,pod-6,pod-12,pod-14,pod-15,pod-18,pod-29,pod-32,pod-36,pod-55,pod-66"
+node-1,"command_node-1,aigc-1,command_center-1,equipt-1,command_node-2,equipt-3,aigc-3,equipt-5,aigc-5,equipt-7"
+node-2,"equipt-2,aigc-6,equipt-8"
+node-3,"equipt-4"
+node-4,"aigc-4,equipt-6"
+node-5,"aigc-2"

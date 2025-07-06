@@ -1,6 +1,7 @@
 FROM m.daocloud.io/python:3.9
 
 RUN mkdir /agent
+RUN mkdir /data-42
 
 RUN pip3 config --user set global.progress_bar off
 RUN pip3 install prometheus_client

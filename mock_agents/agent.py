@@ -57,7 +57,6 @@ class Agent:
         def send_messages():
             start_http_server(port=11112)
             latency_summary = Summary('request_latency_seconds', 'Time taken for requests')
-
             while True:
                 if self.stop_event.is_set():
                     break

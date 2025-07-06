@@ -289,7 +289,7 @@ def test_gen_data():
 
     save_path = ('/Users/amethyst/PycharmProjects/affinity-schedule/data/input')
     pods, comm, platform = gen_pods(G)
-    nodes = gen_nodes(8, 3)
+    nodes = gen_nodes(5, 0)
     save_resource(pods, nodes, platform, save_path)
     save_communication(comm, save_path)
 
