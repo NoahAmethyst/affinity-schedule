@@ -1,4 +1,4 @@
-FROM m.daocloud.io/python:3.9
+FROM python:3.9-alpine
 
 RUN mkdir /agent
 RUN mkdir /data-42
