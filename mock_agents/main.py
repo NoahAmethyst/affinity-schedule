@@ -17,10 +17,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    init_logger()
-
-    logger.info(f'init args: {args}')
-    logger.info("start to init the agent")
+    print(f'init args: {args}')
+    print("start to init the agent")
 
     my_agent = agent.Agent(args.cores, args.memory, args.frequency, args.package, args.target, args.amount, logger)
 
@@ -28,4 +26,4 @@ if __name__ == "__main__":
 
     my_agent.run()
 
-    logger.info("end the agent")
+    print("end the agent")
