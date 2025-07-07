@@ -81,6 +81,7 @@ class Agent:
 
                         latency = end_time - start_time
                         latency_summary.observe(latency)
+                        print(f"send message to {self.target}:{PORT},send latency to monitor")
                         # self.logger.info(f'count: {latency_summary._count.get()}, sum: {latency_summary._sum.get()}')
                         # print(latency_summary._count.get())
                         # print(latency_summary._sum.get())
@@ -106,7 +107,7 @@ class Agent:
                 while True:
                     data = conn.recv(1024)
                     # logger.info(f"receive from {addr} : {data.decode('utf-8')}")
-
+                    print(f'receive from {addr}')
                     if b'e' in data:
                         conn.sendall(b'ACK')
 
