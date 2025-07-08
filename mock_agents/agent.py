@@ -3,6 +3,8 @@ import threading
 import time
 import socket
 import ctypes
+import traceback
+
 from prometheus_client import start_http_server, Summary
 
 PORT = 11111
@@ -95,6 +97,7 @@ class Agent:
 
                 except Exception as e:
                     print(f'seed messsages failed: {e}')
+                    traceback.print_exc()
                 finally:
                     sock.close()
                     time.sleep(1)
