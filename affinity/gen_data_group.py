@@ -81,11 +81,11 @@ def gen_base_communication() -> dict[CommType, CommFrequency]:
     # 通信频次、通信量、通信次数
     times = 1000 * 6
     return {
-        CommType.HIGH: CommFrequency(frequency_high=10, frequency_low=6, data_size_high=5, data_size_low=1,
+        CommType.HIGH: CommFrequency(frequency_high=10, frequency_low=6, data_size_high=2, data_size_low=1,
                                      send_time=times),
-        CommType.MIDDLE: CommFrequency(frequency_high=6, frequency_low=5, data_size_high=2, data_size_low=1,
+        CommType.MIDDLE: CommFrequency(frequency_high=6, frequency_low=5, data_size_high=1, data_size_low=1,
                                        send_time=times),
-        CommType.LOW: CommFrequency(frequency_high=2, frequency_low=1, data_size_high=9, data_size_low=6,
+        CommType.LOW: CommFrequency(frequency_high=2, frequency_low=1, data_size_high=1, data_size_low=1,
                                     send_time=times),
     }
 
@@ -282,8 +282,10 @@ def test_gen_data():
     # 反无人袭扰（平台嵌入）
     # G = anti_undistributed_2()
     # 反无人袭扰（平台嵌入 变化）
-    G = anti_undistributed_3()
+    # G = anti_undistributed_3()
     # 查看节点通信拓扑关系
+    # G=mass_1000()
+    G=mass_500()
     draw_graph(G)
     ### 生成测试数据
 
@@ -421,6 +423,129 @@ def anti_undistributed_2():
     aigc_node2 = PodAttr(pod_type=PodType.AIGC, comm_type=CommType.LOW, num=2, id=2)
     # AIGC红外
     aigc_node3 = PodAttr(pod_type=PodType.AIGC, comm_type=CommType.LOW, num=2, id=3)
+    # 创建有向图
+    G = nx.DiGraph()
+    # 添加节点
+    G.add_node(command_node)
+    G.add_node(plan_node1)
+    G.add_node(plan_node2)
+
+    G.add_node(equipt_node1)
+    G.add_node(equipt_node2)
+    G.add_node(equipt_node3)
+    G.add_node(equipt_node4)
+    G.add_node(equipt_node5)
+
+    G.add_node(aigc_node1)
+    G.add_node(aigc_node2)
+    G.add_node(aigc_node3)
+    # 添加边（通信关系）
+    G.add_edge(command_node, plan_node1)
+    G.add_edge(plan_node1, plan_node2)
+    G.add_edge(plan_node2, equipt_node3)
+    G.add_edge(equipt_node1, plan_node1)
+    G.add_edge(equipt_node2, equipt_node1)
+    G.add_edge(equipt_node3, equipt_node1)
+    G.add_edge(equipt_node4, equipt_node1)
+    G.add_edge(equipt_node4, equipt_node1)
+    G.add_edge(plan_node1, equipt_node5)
+
+    G.add_edge(aigc_node1, equipt_node2)
+    G.add_edge(aigc_node2, equipt_node3)
+    G.add_edge(aigc_node3, equipt_node4)
+
+    return G
+
+
+def mass_1000():
+    # 构造基座节点
+    # 指挥节点
+    command_node = PodAttr(pod_type=PodType.COMMAND_CENTER, comm_type=CommType.LOW, num=10)
+    # 规划控制
+    # 反无人袭扰任务规划
+    plan_node1 = PodAttr(pod_type=PodType.COMMAND_NODE, comm_type=CommType.MIDDLE, num=50, id=1)
+    # 飞行控制
+    plan_node2 = PodAttr(pod_type=PodType.COMMAND_NODE, comm_type=CommType.MIDDLE, num=50, id=2)
+
+    # 设备节点
+    # 无人机信息融合
+    equipt_node1 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.HIGH, num=100, id=1)
+    # 无人机雷达识别
+    equipt_node2 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.MIDDLE, num=100, id=2)
+    # 无人机可见光识别
+    equipt_node3 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.MIDDLE, num=100, id=3)
+    # 无人机红外识别
+    equipt_node4 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.HIGH, num=100, id=4)
+    # 作战行动
+    equipt_node5 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.HIGH, num=100, id=5)
+    # AIGC光学
+    aigc_node1 = PodAttr(pod_type=PodType.AIGC, comm_type=CommType.LOW, num=100, id=1)
+    # AIGC雷达
+    aigc_node2 = PodAttr(pod_type=PodType.AIGC, comm_type=CommType.LOW, num=100, id=2)
+    # AIGC红外
+    aigc_node3 = PodAttr(pod_type=PodType.AIGC, comm_type=CommType.LOW, num=150, id=3)
+    # 创建有向图
+    G = nx.DiGraph()
+    # 添加节点
+    G.add_node(command_node)
+    G.add_node(plan_node1)
+    G.add_node(plan_node2)
+
+    G.add_node(equipt_node1)
+    G.add_node(equipt_node2)
+    G.add_node(equipt_node3)
+    G.add_node(equipt_node4)
+    G.add_node(equipt_node5)
+
+    G.add_node(aigc_node1)
+    G.add_node(aigc_node2)
+    G.add_node(aigc_node3)
+    # 添加边（通信关系）
+    G.add_edge(command_node, plan_node1)
+    G.add_edge(plan_node1, plan_node2)
+    G.add_edge(plan_node2, equipt_node3)
+    G.add_edge(equipt_node1, plan_node1)
+    G.add_edge(equipt_node2, equipt_node1)
+    G.add_edge(equipt_node3, equipt_node1)
+    G.add_edge(equipt_node4, equipt_node1)
+    G.add_edge(equipt_node4, equipt_node1)
+    G.add_edge(plan_node1, equipt_node5)
+
+    G.add_edge(aigc_node1, equipt_node2)
+    G.add_edge(aigc_node2, equipt_node3)
+    G.add_edge(aigc_node3, equipt_node4)
+
+    return G
+
+
+
+def mass_500():
+    # 构造基座节点
+    # 指挥节点
+    command_node = PodAttr(pod_type=PodType.COMMAND_CENTER, comm_type=CommType.LOW, num=5)
+    # 规划控制
+    # 反无人袭扰任务规划
+    plan_node1 = PodAttr(pod_type=PodType.COMMAND_NODE, comm_type=CommType.MIDDLE, num=25, id=1)
+    # 飞行控制
+    plan_node2 = PodAttr(pod_type=PodType.COMMAND_NODE, comm_type=CommType.MIDDLE, num=25, id=2)
+
+    # 设备节点
+    # 无人机信息融合
+    equipt_node1 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.HIGH, num=50, id=1)
+    # 无人机雷达识别
+    equipt_node2 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.MIDDLE, num=50, id=2)
+    # 无人机可见光识别
+    equipt_node3 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.MIDDLE, num=50, id=3)
+    # 无人机红外识别
+    equipt_node4 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.HIGH, num=50, id=4)
+    # 作战行动
+    equipt_node5 = PodAttr(pod_type=PodType.EQUIPT, comm_type=CommType.HIGH, num=50, id=5)
+    # AIGC光学
+    aigc_node1 = PodAttr(pod_type=PodType.AIGC, comm_type=CommType.LOW, num=50, id=1)
+    # AIGC雷达
+    aigc_node2 = PodAttr(pod_type=PodType.AIGC, comm_type=CommType.LOW, num=50, id=2)
+    # AIGC红外
+    aigc_node3 = PodAttr(pod_type=PodType.AIGC, comm_type=CommType.LOW, num=75, id=3)
     # 创建有向图
     G = nx.DiGraph()
     # 添加节点

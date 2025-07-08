@@ -37,6 +37,9 @@ class Agent:
     def run(self) -> None:
         print("start to run agent")
 
+        start_http_server(port=11112)
+        print('start prometheus observ')
+
         for process in self.busy_processes:
             process.start()
 
@@ -54,8 +57,9 @@ class Agent:
             self.stop_event.set()
 
     def new_seed_process(self) -> None:
+
         def send_messages():
-            start_http_server(port=11112)
+            # start_http_server(port=11112)
             latency_summary = Summary('request_latency_seconds', 'Time taken for requests')
             while True:
                 if self.stop_event.is_set():
@@ -110,7 +114,7 @@ class Agent:
                 while True:
                     data = conn.recv(1024)
                     # logger.info(f"receive from {addr} : {data.decode('utf-8')}")
-                    print(f'receive from {addr}')
+                    # print(f'receive from {addr}')
                     if b'e' in data:
                         conn.sendall(b'ACK')
 

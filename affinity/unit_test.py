@@ -8,8 +8,8 @@ from affinity.gen_data import gen_pods, gen_nodes, save_resource, save_communica
 def test_gen_data():
     ### 生成测试数据
     save_path = ('/Users/amethyst/PycharmProjects/affinity-schedule/data/input')
-    pods, comm, platform = gen_pods(70)
-    nodes = gen_nodes(5, 0)
+    pods, comm, platform = gen_pods(1000)
+    nodes = gen_nodes(19, 0)
     save_resource(pods, nodes, platform, save_path)
     save_communication(comm, save_path)
 

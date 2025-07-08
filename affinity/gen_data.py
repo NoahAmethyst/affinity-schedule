@@ -203,7 +203,7 @@ def save_resource(pods: list[BasePod], nodes: list[BaseNode], platforms: list[Ba
 if __name__ == '__main__':
     ### 生成测试数据
     save_path = ('/Users/amethyst/PycharmProjects/affinity-schedule/data/input')
-    pods, comm, platform = gen_pods(50)
+    pods, comm, platform = gen_pods(1000)
     nodes = gen_nodes(8, 3)
     save_resource(pods, nodes, platform, save_path)
     save_communication(comm, save_path)
