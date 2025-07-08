@@ -5,7 +5,7 @@ import socket
 import ctypes
 import traceback
 
-from prometheus_client import start_http_server, Summary
+from prometheus_client import start_http_server, Summary, multiprocess
 
 PORT = 11111
 
@@ -20,6 +20,12 @@ class Agent:
         self.amount = amount
 
         self.stop_event = multiprocessing.Event()
+
+        # 初始化 Prometheus Summary 指标（类级别）
+        self.latency_summary = Summary(
+            'request_latency_seconds',
+            'Time taken for requests'
+        )
 
         self.busy_processes = new_busy_tasks(cpu, self.stop_event)
         print("init the busy processes successfully")
@@ -37,6 +43,7 @@ class Agent:
     def run(self) -> None:
         print("start to run agent")
 
+        # 在多进程环境中需要特殊处理
         start_http_server(port=11112)
         print('start prometheus observ')
 
@@ -57,10 +64,7 @@ class Agent:
             self.stop_event.set()
 
     def new_seed_process(self) -> None:
-
         def send_messages():
-            # start_http_server(port=11112)
-            latency_summary = Summary('request_latency_seconds', 'Time taken for requests')
             while True:
                 if self.stop_event.is_set():
                     break
@@ -86,18 +90,14 @@ class Agent:
                         end_time = time.time()
 
                         latency = end_time - start_time
-                        latency_summary.observe(latency)
-                        print(f"send message to {self.target}:{PORT},send latency to monitor")
-                        # self.logger.info(f'count: {latency_summary._count.get()}, sum: {latency_summary._sum.get()}')
-                        # print(latency_summary._count.get())
-                        # print(latency_summary._sum.get())
+                        self.latency_summary.observe(latency)
+                        print(f"send message to {self.target}:{PORT},send latency {latency} to monitor")
 
-                        time.sleep(1 / self.frequency)  # 根据频率控制发送间隔
+                        time.sleep(1 / self.frequency)
 
                     if not self.stop_event.is_set():
                         print("agent has finished send task")
                         break
-
 
                 except Exception as e:
                     print(f'seed messsages failed: {e}')
@@ -107,6 +107,8 @@ class Agent:
                     time.sleep(1)
 
         self.send_process = multiprocessing.Process(target=send_messages)
+
+    # ... 其他方法保持不变 ...
 
     def new_listen_process(self) -> None:
         def process_reveived_message(conn: socket.socket, addr):
