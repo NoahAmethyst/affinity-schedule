@@ -90,7 +90,7 @@ def gen_base_communication() -> dict[CommType, CommFrequency]:
     }
 
 
-def gen_pods(G: nx.DiGraph = None) -> tuple[list[BasePod], list[Communication], list[BasePlatform]]:
+def gen_pods(G: nx.DiGraph = None, scene: int = 1) -> tuple[list[BasePod], list[Communication], list[BasePlatform]]:
     """
     生成Pod、通信关系和平台数据
     :param num: 生成的Pod数量
@@ -104,12 +104,53 @@ def gen_pods(G: nx.DiGraph = None) -> tuple[list[BasePod], list[Communication], 
     communications = []
     platforms = []
 
-    type_counter = {
-        PodType.COMMAND_CENTER: 0,
-        PodType.COMMAND_NODE: 0,
-        PodType.EQUIPT: 0,
-        PodType.AIGC: 0
+    type_name_1 = {
+        PodType.COMMAND_CENTER: ['command_center'],
+        PodType.COMMAND_NODE: ['usv_group_mine_countermeasure_planning', 'usv_formation_control',
+                               ],
+        PodType.EQUIPT: ['usv_acoustic_recognition', 'usv_navigation_control', 'bomb_disposal', 'bomb_action'],
+        PodType.AIGC: ['acoustic_generation']
     }
+
+    type_name_2 = {
+        PodType.COMMAND_CENTER: ['command_center'],
+        PodType.COMMAND_NODE: ['usv_formation_control', 'uav_optics', 'usv_group_anti_swarm_planning',
+                               ],
+        PodType.EQUIPT: ['single_usv_data_fusion',
+                         'usv_combat_operations', 'uav_optical_recognition', 'flight_control', 'uav_data_fusion',
+                         'uav_radar_recognition',
+                         'uav_visible_light_recognition', 'uav_infrared_recognition', 'uav_combat_operations',
+                         'aigc_uav_infrared_generation', 'uav_combat_operations', ],
+        PodType.AIGC: ['aigc_uav_infrared_generation', ]
+    }
+
+    type_name_3 = {
+        PodType.COMMAND_CENTER: ['command_center'],
+        PodType.COMMAND_NODE: ['usv_formation_control', 'uav_optics', 'usv_group_anti_swarm_planning',
+                               'usv_group_data_fusion',
+                               ],
+        PodType.EQUIPT: ['usv_combat_operations',
+                         'uav_optical_recognition', 'flight_control',
+                         'uav_data_fusion', 'uav_radar_recognition', 'uav_visible_light_recognition',
+                         'uav_infrared_recognition', 'uav_combat_operations',
+                         'aigc_uav_infrared_generation', 'uav_combat_operations', ],
+        PodType.AIGC: ['aigc_optical_generation', 'aigc_infrared_generation', 'aigc_uav_optical_generation',
+                       'aigc_uav_infrared_generation',
+                       'acoustic_generation']
+    }
+
+    type_name_4 = {
+        PodType.COMMAND_CENTER: ['command_center'],
+        PodType.COMMAND_NODE: ['usv_group_anti_swarm_planning', ],
+        PodType.EQUIPT: ['uav_optical_recognition', 'flight_control',
+                         'uav_data_fusion', 'uav_radar_recognition', 'uav_visible_light_recognition',
+                         'uav_infrared_recognition', 'uav_combat_operations',
+                         'aigc_uav_infrared_generation', 'uav_combat_operations'],
+        PodType.AIGC: ['aigc_optical_generation', 'aigc_infrared_generation', 'aigc_uav_optical_generation',
+                       'aigc_uav_infrared_generation', 'acoustic_generation']
+    }
+
+    name_counter: dict[str, int] = {}
 
     pod_dict = {pod_attr: [] for pod_attr in G.nodes.keys()}
 
@@ -119,11 +160,26 @@ def gen_pods(G: nx.DiGraph = None) -> tuple[list[BasePod], list[Communication], 
         num_pods = node_attr.num
 
         for i in range(num_pods):
+            type_name = type_name_1
+            if scene == 2:
+                type_name = type_name_2
+            if scene == 3:
+                type_name = type_name_3
+            if scene == 4:
+                type_name = type_name_4
+            values = type_name.get(pod_type)
+            pod_name = random.choice(values)
+            if pod_name is None:
+                pod_name = type_name.get(pod_type)[0]
+            index = name_counter.get(pod_name)
+            if index is None:
+                index = 1
+
             # 从基础Pod中选择一个模板
             base_pod = base_pods[pod_type][random.randint(0, len(base_pods[pod_type]) - 1)]
             pod = copy.copy(base_pod)
-            pod.name = f"{pod_type.name.lower()}-{type_counter[pod_type] + 1}"
-            type_counter[pod_type] += 1
+            pod.name = f'{pod_name}-{index}'
+            name_counter.__setitem__(pod_name, index + 1)
             pods.append(pod)
 
             pod_dict[node_attr].append(pod)
@@ -276,21 +332,21 @@ def test_gen_data():
     # 构造通信拓扑
 
     # 扫雷通信
-    # G = mine_clear()
+    # G, scene = mine_clear()
     # 反无人袭扰（无人机协同）
-    # G = anti_undistributed_1()
+    # G,scene = anti_undistributed_1()
     # 反无人袭扰（平台嵌入）
-    # G = anti_undistributed_2()
+    # G,scene = anti_undistributed_2()
     # 反无人袭扰（平台嵌入 变化）
-    # G = anti_undistributed_3()
+    G, scene = anti_undistributed_3()
     # 查看节点通信拓扑关系
     # G=mass_1000()
-    G=mass_500()
+    # G = mass_500()
     draw_graph(G)
     ### 生成测试数据
 
     save_path = ('/Users/amethyst/PycharmProjects/affinity-schedule/data/input')
-    pods, comm, platform = gen_pods(G)
+    pods, comm, platform = gen_pods(G, scene=scene)
     nodes = gen_nodes(5, 0)
     save_resource(pods, nodes, platform, save_path)
     save_communication(comm, save_path)
@@ -327,7 +383,7 @@ def mine_clear():
     G.add_edge(plan_node1, plan_node2)
     G.add_edge(equipt_node3, plan_node2)
     G.add_edge(aigc_node, equipt_node2)
-    return G
+    return G, 1
 
 
 # 反无人袭扰：侦察机协同配合
@@ -392,7 +448,7 @@ def anti_undistributed_1():
     G.add_edge(aigc_node2, equipt_node5)
     G.add_edge(aigc_node3, equipt_node6)
 
-    return G
+    return G, 2
 
 
 # 反无人袭扰：平台嵌入
@@ -454,7 +510,7 @@ def anti_undistributed_2():
     G.add_edge(aigc_node2, equipt_node3)
     G.add_edge(aigc_node3, equipt_node4)
 
-    return G
+    return G, 3
 
 
 def mass_1000():
@@ -515,8 +571,7 @@ def mass_1000():
     G.add_edge(aigc_node2, equipt_node3)
     G.add_edge(aigc_node3, equipt_node4)
 
-    return G
-
+    return G, 4
 
 
 def mass_500():
@@ -634,4 +689,4 @@ def anti_undistributed_3():
     G.add_edge(aigc_node2, equipt_node3)
     G.add_edge(aigc_node3, equipt_node4)
 
-    return G
+    return G, 4

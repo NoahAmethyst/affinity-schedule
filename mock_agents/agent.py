@@ -1,3 +1,4 @@
+import datetime
 import multiprocessing
 import threading
 import time
@@ -84,10 +85,10 @@ class Agent:
                         if self.stop_event.is_set():
                             break
 
-                        start_time = time.time()
+                        start_time = datetime.datetime.now().timestamp() * 1000
                         sock.sendall(packet)
                         sock.recv(1024)
-                        end_time = time.time()
+                        end_time = datetime.datetime.now().timestamp() * 1000
 
                         latency = end_time - start_time
                         self.latency_summary.observe(latency)
