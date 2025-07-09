@@ -23,10 +23,7 @@ class Agent:
         self.stop_event = multiprocessing.Event()
 
         # 初始化 Prometheus Summary 指标（类级别）
-        self.latency_summary = Summary(
-            'request_latency_seconds',
-            'Time taken for requests'
-        )
+
 
         self.busy_processes = new_busy_tasks(cpu, self.stop_event)
         print("init the busy processes successfully")
@@ -45,8 +42,8 @@ class Agent:
         print("start to run agent")
 
         # 在多进程环境中需要特殊处理
-        start_http_server(port=11112)
-        print('start prometheus observ')
+        # start_http_server(port=11112)
+        # print('start prometheus observ')
 
         for process in self.busy_processes:
             process.start()
@@ -66,6 +63,12 @@ class Agent:
 
     def new_seed_process(self) -> None:
         def send_messages():
+            start_http_server(port=11112)
+            print('start prometheus observ')
+            latency_summary = Summary(
+                'request_latency_seconds',
+                'Time taken for requests'
+            )
             while True:
                 if self.stop_event.is_set():
                     break
@@ -91,7 +94,7 @@ class Agent:
                         end_time = datetime.datetime.now().timestamp() * 1000
 
                         latency = end_time - start_time
-                        self.latency_summary.observe(latency)
+                        latency_summary.observe(latency)
                         print(f"send message to {self.target}:{PORT},send latency {latency} to monitor")
 
                         time.sleep(1 / self.frequency)
