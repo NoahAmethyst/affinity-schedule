@@ -332,13 +332,13 @@ def test_gen_data():
     # 构造通信拓扑
 
     # 扫雷通信
-    # G, scene = mine_clear()
+    G, scene = mine_clear()
     # 反无人袭扰（无人机协同）
     # G,scene = anti_undistributed_1()
     # 反无人袭扰（平台嵌入）
     # G,scene = anti_undistributed_2()
     # 反无人袭扰（平台嵌入 变化）
-    G, scene = anti_undistributed_3()
+    # G, scene = anti_undistributed_3()
     # 查看节点通信拓扑关系
     # G=mass_1000()
     # G = mass_500()

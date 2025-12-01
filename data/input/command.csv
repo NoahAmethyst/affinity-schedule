@@ -1,4 +1,4 @@
 name,parent
 command_center-1,1
-usv_group_anti_swarm_planning-1,2
-usv_group_anti_swarm_planning-2,2
+usv_formation_control-1,2
+usv_group_mine_countermeasure_planning-1,2
