@@ -1,6 +1,5 @@
 import math
 import pandas as pd
-import numpy as np
 
 
 class BaseObject:
@@ -25,6 +24,8 @@ class BaseObject:
         return f"{self.name},cpu:{self.cpu:.2f},mem:{self.mem:.2f},gpu:{self.gpu:.2f},disk:{self.disk:.2f}"
 
     def __add__(self, other):
+        if not isinstance(other, BaseObject):
+            return NotImplemented
         return BaseObject(
             "",
             self.cpu + other.cpu,
@@ -34,6 +35,8 @@ class BaseObject:
         )
 
     def __sub__(self, other):
+        if not isinstance(other, BaseObject):
+            return NotImplemented
         return BaseObject(
             self.name,
             self.cpu - other.cpu,
@@ -44,6 +47,8 @@ class BaseObject:
 
     def __ge__(self, other):
         """ >= """
+        if not isinstance(other, BaseObject):
+            return NotImplemented
         if self.cpu < other.cpu:
             return False
         if self.mem < other.mem:
@@ -84,16 +89,28 @@ class BasePod(BaseObject):
         return hash(self.name)
 
     def __add__(self, other):
-        result = super().__add__(other)
-        result.__class__ = BasePod
-        return result
+        if not isinstance(other, BaseObject):
+            return NotImplemented
+        return BasePod(
+            "",
+            self.cpu + other.cpu,
+            self.mem + other.mem,
+            self.gpu + other.gpu,
+            self.disk + other.disk,
+            "",
+        )
 
     def __sub__(self, other):
-        result = super().__sub__(other)
-        result.__class__ = BasePod
-        return result
-
-
+        if not isinstance(other, BaseObject):
+            return NotImplemented
+        return BasePod(
+            self.name,
+            self.cpu - other.cpu,
+            self.mem - other.mem,
+            self.gpu - other.gpu,
+            self.disk - other.disk,
+            self.platform,
+        )
 
     @classmethod
     def get_columns(cls) -> list[str]:
@@ -133,72 +150,70 @@ class BaseNode(BaseObject):
 
     def max_usage(self, obj: BaseObject) -> float:
         """ pod 在 node 中的最大资源占比 """
-        v = 0
-        if self.cpu != 0:
-            tmp = obj.cpu / self.cpu
-            if tmp > v:
-                v = tmp
-        if self.gpu != 0:
-            tmp = obj.gpu / self.gpu
-            if tmp > v:
-                v = tmp
-        elif obj.gpu > 0:
-            return math.inf
-        if self.mem != 0:
-            tmp = obj.mem / self.mem
-            if tmp > v:
-                v = tmp
-        if self.disk != 0:
-            tmp = obj.disk / self.disk
-            if tmp > v:
-                v = tmp
-        return v
+        return max(
+            self._usage_ratio(self.cpu, obj.cpu),
+            self._usage_ratio(self.mem, obj.mem),
+            self._usage_ratio(self.gpu, obj.gpu),
+            self._usage_ratio(self.disk, obj.disk),
+        )
 
     def min_usage(self, used: BaseObject) -> float:
-        v = math.inf
-        if self.cpu != 0:
-            tmp = used.cpu / self.cpu
-            if tmp < v:
-                v = tmp
-        if self.gpu != 0:
-            tmp = used.gpu / self.gpu
-            if tmp < v:
-                v = tmp
-        elif used.gpu > 0:
+        ratios = [
+            self._usage_ratio(self.cpu, used.cpu),
+            self._usage_ratio(self.mem, used.mem),
+            self._usage_ratio(self.gpu, used.gpu),
+            self._usage_ratio(self.disk, used.disk),
+        ]
+        if math.inf in ratios:
             return math.inf
-        if self.mem != 0:
-            tmp = used.mem / self.mem
-            if tmp < v:
-                v = tmp
-        if self.disk != 0:
-            tmp = used.disk / self.disk
-            if tmp < v:
-                v = tmp
-        return v
+        finite_ratios = [
+            ratio
+            for capacity, ratio in zip(
+                (self.cpu, self.mem, self.gpu, self.disk),
+                ratios,
+            )
+            if capacity > 0
+        ]
+        return min(finite_ratios, default=0.0)
 
     def usage(self, used):
-        result = BaseObject("", 0, 0, 0, 0)
-        if self.cpu != 0:
-            result.cpu = used.cpu / self.cpu
-        if self.gpu != 0:
-            result.gpu = used.gpu / self.gpu
-        elif result.gpu > 0:
-            result.gpu = math.inf
-        if self.mem != 0:
-            result.mem = used.mem / self.mem
-        if self.disk != 0:
-            result.disk = used.disk / self.disk
-        return result
+        return BaseObject(
+            "",
+            self._usage_ratio(self.cpu, used.cpu),
+            self._usage_ratio(self.mem, used.mem),
+            self._usage_ratio(self.gpu, used.gpu),
+            self._usage_ratio(self.disk, used.disk),
+        )
+
+    @staticmethod
+    def _usage_ratio(capacity: float, used: float) -> float:
+        if capacity > 0:
+            return used / capacity
+        return math.inf if used > 0 else 0.0
 
     def __add__(self, other):
-        result = super().__add__(other)
-        result.__class__ = BaseNode
-        return result
+        if not isinstance(other, BaseObject):
+            return NotImplemented
+        return BaseNode(
+            "",
+            self.cpu + other.cpu,
+            self.mem + other.mem,
+            self.gpu + other.gpu,
+            self.disk + other.disk,
+            self.net + getattr(other, "net", 0),
+        )
 
     def __sub__(self, other):
-        result = super().__sub__(other)
-        result.__class__ = BaseNode
-        return result
+        if not isinstance(other, BaseObject):
+            return NotImplemented
+        return BaseNode(
+            self.name,
+            self.cpu - other.cpu,
+            self.mem - other.mem,
+            self.gpu - other.gpu,
+            self.disk - other.disk,
+            self.net - getattr(other, "net", 0),
+        )
 
 
 class BasePlatform:
@@ -232,7 +247,7 @@ class BasePlatform:
     @classmethod
     def from_dataframe(cls, data: pd.Series):
         p = cls(*[data[idx] for idx in cls.static_columns])
-        if p.parent is np.nan:
+        if pd.isna(p.parent):
             p.parent = None
         return p
 
@@ -271,4 +286,3 @@ class SingleSchedulerPlan:
     def __init__(self, pod: str, scheduled_node):
         self.pod = pod
         self.scheduled_node = scheduled_node
-

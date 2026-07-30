@@ -5,15 +5,13 @@
 import json
 import os
 from enum import Enum
-from operator import contains
+from itertools import combinations
 
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.pyplot as plt
 from affinity.resource import BasePod, Communication, BaseNode, BasePlatform
-import pytest
 
 
 class ScenType(Enum):
@@ -26,6 +24,27 @@ class ScenType(Enum):
     ANTI_UNDISTRIBUTED_2 = 3
     # 反无人袭扰动-智能体嵌入，信息变化
     ANTI_UNDISTRIBUTED_3 = 4
+
+
+def _read_csv(path: str, required_columns: list[str]) -> pd.DataFrame:
+    try:
+        data = pd.read_csv(path)
+    except (OSError, pd.errors.ParserError) as exc:
+        raise ValueError(f"无法读取输入文件 {path}: {exc}") from exc
+
+    missing_columns = [column for column in required_columns if column not in data.columns]
+    if missing_columns:
+        raise ValueError(f"输入文件 {path} 缺少列: {', '.join(missing_columns)}")
+    return data
+
+
+def _normalize_matrix(matrix: np.ndarray) -> np.ndarray:
+    if not np.isfinite(matrix).all():
+        raise ValueError("亲和性矩阵包含 NaN 或无穷值")
+    value_range = matrix.max() - matrix.min()
+    if value_range == 0:
+        return np.zeros_like(matrix, dtype=float)
+    return (matrix - matrix.min()) / value_range
 
 
 def gen_node_name(pod: BasePod, scene_type: ScenType):
@@ -120,8 +139,11 @@ def gen_node_name(pod: BasePod, scene_type: ScenType):
         if callable(aigc_mapping):
             return aigc_mapping(_id)
 
-        for (start, end), aigc_name in aigc_mapping.items():
-            if isinstance(start, int) and start < _id < end:
+        for key, aigc_name in aigc_mapping.items():
+            if key == "default":
+                continue
+            start, end = key
+            if start < _id < end:
                 return aigc_name.format(_id)
         return aigc_mapping.get('default', '{}').format(_id)
 
@@ -129,7 +151,7 @@ def gen_node_name(pod: BasePod, scene_type: ScenType):
     return name
 
 
-def graph_to_tree(G, root_node=None):
+def graph_to_tree(G, root_node=None, scene_type=ScenType.ANTI_UNDISTRIBUTED_2):
     """
     将networkx的Graph转换为树形结构
 
@@ -157,17 +179,17 @@ def graph_to_tree(G, root_node=None):
 
     # 创建树结构
     tree = {
-        "id": gen_node_name(root_node, ScenType.ANTI_UNDISTRIBUTED_2),
+        "id": gen_node_name(root_node, scene_type),
         "children": []
     }
 
     # 添加子节点
-    _add_children(G, tree, root_node, visited=set([root_node]))
+    _add_children(G, tree, root_node, visited={root_node}, scene_type=scene_type)
 
     return tree
 
 
-def _add_children(G, parent_node, node_id, visited):
+def _add_children(G, parent_node, node_id, visited, scene_type):
     """
     递归添加子节点
     """
@@ -179,7 +201,7 @@ def _add_children(G, parent_node, node_id, visited):
 
             # 创建子节点
             child = {
-                "id": gen_node_name(neighbor, scene_type=ScenType.ANTI_UNDISTRIBUTED_2),
+                "id": gen_node_name(neighbor, scene_type=scene_type),
                 "children": []
             }
 
@@ -188,7 +210,7 @@ def _add_children(G, parent_node, node_id, visited):
                 child["value"] = G.nodes[neighbor]["value"]
 
             # 递归添加子节点
-            _add_children(G, child, neighbor, visited)
+            _add_children(G, child, neighbor, visited, scene_type)
 
             # 如果子节点有子节点或者有value属性，则保留，否则简化为只有id
             if child["children"] or "value" in child:
@@ -202,47 +224,83 @@ class Graph:
     data_name = 'data'  # 原始输入数据标签
     command_affinity_name = 'command_affinity'  # 指挥亲和性标签
     race_affinity_name = 'race_affinity'  # 资源竞争亲和性标签
-    weight = [1000, 1, 0]
+    weight = [1000, 1]
     attr = [net_affinity_name, race_affinity_name]
 
     def __init__(self, path: str):
+        self.input_path = path
         self.pod_graph = nx.Graph()
         self.command_graph = nx.Graph()
-        ### read pods
-        data = pd.read_csv(f"{path}/pods.csv")
+        # read pods
+        pods_path = os.path.join(path, "pods.csv")
+        data = _read_csv(pods_path, BasePod.get_columns())
+        duplicate_pods = data[data["name"].duplicated()]["name"].tolist()
+        if duplicate_pods:
+            raise ValueError(f"输入文件 {pods_path} 包含重复 Pod: {duplicate_pods}")
         self.pods = []
         self.pod2idx = {}
-        for idx, row in data.iterrows():
+        for idx, (_, row) in enumerate(data.iterrows()):
             pod = BasePod.from_dataframe(row)
             self.pod_graph.add_node(pod)
             self.pods.append(pod)
             self.pod2idx[pod.name] = idx
 
-        ### read communication
-        data = pd.read_csv(os.path.join(path, "communication.csv"))
-        for _, row in data.iterrows():
+        # read communication
+        communication_path = os.path.join(path, "communication.csv")
+        data = _read_csv(communication_path, Communication.get_columns())
+        for row_number, (_, row) in enumerate(data.iterrows(), start=2):
             comm = Communication.from_dataframe(row)
-            self.pod_graph.add_edge(self.pods[self.pod2idx[comm.src_pod]], self.pods[self.pod2idx[comm.tgt_pod]],
-                                    data=comm, kind="comm")
-            self.pod_graph.add_edge(self.pods[self.pod2idx[comm.src_pod]], self.pods[self.pod2idx[comm.tgt_pod]],
-                                    label=comm.to_string())
+            missing_pods = [
+                pod_name
+                for pod_name in (comm.src_pod, comm.tgt_pod)
+                if pod_name not in self.pod2idx
+            ]
+            if missing_pods:
+                raise ValueError(
+                    f"输入文件 {communication_path} 第 {row_number} 行引用了不存在的 Pod: {missing_pods}"
+                )
+            source = self.pods[self.pod2idx[comm.src_pod]]
+            target = self.pods[self.pod2idx[comm.tgt_pod]]
+            self.pod_graph.add_edge(
+                source,
+                target,
+                data=comm,
+                kind="comm",
+                label=comm.to_string(),
+            )
 
-        ### read nodes
-        data = pd.read_csv(os.path.join(path, "nodes.csv"))
+        # read nodes
+        nodes_path = os.path.join(path, "nodes.csv")
+        data = _read_csv(nodes_path, BaseNode.get_columns())
+        duplicate_nodes = data[data["name"].duplicated()]["name"].tolist()
+        if duplicate_nodes:
+            raise ValueError(f"输入文件 {nodes_path} 包含重复 Node: {duplicate_nodes}")
         self.nodes = []
         for _, row in data.iterrows():
             node = BaseNode.from_dataframe(row)
             self.nodes.append(node)
 
-        # ## read command
-        # data = pd.read_csv(os.path.join(path, 'command.csv'))
-        # self.name2platform = {}
-        # for idx, row in data.iterrows():
-        #     p = BasePlatform.from_dataframe(row)
-        #     self.name2platform[p.name] = p
-        #     self.command_graph.add_node(p)
-        #     if p.parent is not None:
-        #         self.command_graph.add_edge(self.name2platform[p.parent], p, label="")
+        self.name2platform = {}
+
+    def _load_command_topology(self):
+        if self.name2platform:
+            return
+        command_path = os.path.join(self.input_path, "command.csv")
+        command_data = _read_csv(command_path, BasePlatform.get_columns())
+        for _, row in command_data.iterrows():
+            platform = BasePlatform.from_dataframe(row)
+            if platform.name in self.name2platform:
+                raise ValueError(f"输入文件 {command_path} 包含重复平台: {platform.name}")
+            self.name2platform[platform.name] = platform
+            self.command_graph.add_node(platform)
+        for platform in self.name2platform.values():
+            if platform.parent is None:
+                continue
+            if platform.parent not in self.name2platform:
+                raise ValueError(
+                    f"输入文件 {command_path} 中平台 {platform.name} 的父平台不存在: {platform.parent}"
+                )
+            self.command_graph.add_edge(self.name2platform[platform.parent], platform, label="")
 
     def draw_command(self, save_path):
         G = self.command_graph
@@ -318,25 +376,33 @@ class Graph:
 
     def command_affinity(self):
         """ 指挥交互关系亲和性 """
-        for x in self.pod_graph.nodes:
-            for y in self.pod_graph.nodes:
-                if x == y:
-                    break
-                x_platform = self.name2platform[x.platform]
-                y_platform = self.name2platform[y.platform]
-                length = nx.shortest_path_length(self.command_graph, x_platform, y_platform)
-                if length == 0:
-                    length = 0.1
-                self.pod_graph.add_edge(x, y, command_affinity=1 / length)
+        self._load_command_topology()
+        if not self.name2platform:
+            raise ValueError("未加载指挥关系，无法计算指挥亲和性")
+        for source, target in combinations(self.pod_graph.nodes, 2):
+            try:
+                source_platform = self.name2platform[source.platform]
+                target_platform = self.name2platform[target.platform]
+                length = nx.shortest_path_length(
+                    self.command_graph,
+                    source_platform,
+                    target_platform,
+                )
+            except KeyError as exc:
+                raise ValueError(f"Pod 引用了不存在的平台: {exc.args[0]}") from exc
+            except nx.NetworkXNoPath:
+                continue
+            self.pod_graph.add_edge(
+                source,
+                target,
+                command_affinity=1 / max(length, 0.1),
+            )
 
     def race_affinity(self):
         """ 资源竞争亲和性 """
-        for source in self.pod_graph.nodes:
-            for target in self.pod_graph.nodes:
-                if source == target:
-                    break
-                v = BasePod.race_affinity(source, target)
-                self.pod_graph.add_edge(source, target, race_affinity=-v)
+        for source, target in combinations(self.pod_graph.nodes, 2):
+            value = BasePod.race_affinity(source, target)
+            self.pod_graph.add_edge(source, target, race_affinity=-value)
 
     # 计算节点亲和性（资源竞争，是否 > pod 需要，如果 > 就是1）
     def node_affinity(self):
@@ -350,7 +416,9 @@ class Graph:
                     matrix[x, y] = 0
         return matrix
 
-    def pod_affinity_to_matrix(self, attr: [str], weight: [float], norm=True):
+    def pod_affinity_to_matrix(self, attr: list[str], weight: list[float], norm=True):
+        if len(attr) != len(weight):
+            raise ValueError("亲和性属性数量必须与权重数量一致")
         matrixs = [np.zeros((self.pod_graph.number_of_nodes(), self.pod_graph.number_of_nodes()), dtype=float) for i in
                    range(len(attr))]
         for u, v, d in self.pod_graph.edges(data=True):
@@ -362,17 +430,18 @@ class Graph:
                     matrixs[t][j][i] = d[a]
         if norm:
             for i, matrix in enumerate(matrixs):
-                matrixs[i] = (matrix - matrix.min()) / (matrix.max() - matrix.min())
+                matrixs[i] = _normalize_matrix(matrix)
         result = np.zeros((self.pod_graph.number_of_nodes(), self.pod_graph.number_of_nodes()), dtype=float)
         for w, m in zip(weight, matrixs):
             result += w * m
         if norm:
-            result = (result - result.min()) / (result.max() - result.min())
+            result = _normalize_matrix(result)
         return result
 
     @classmethod
     def save_affinity(cls, matrix: np.ndarray, save_path: str, file_name: str):
-        np.save(f"{save_path}/{file_name}.npy", matrix)
+        os.makedirs(save_path, exist_ok=True)
+        np.save(os.path.join(save_path, f"{file_name}.npy"), matrix)
 
     @classmethod
     def draw_hist(cls, matrix):
