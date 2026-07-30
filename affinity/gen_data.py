@@ -1,4 +1,5 @@
 import copy
+import os
 import queue
 import pandas as pd
 
@@ -56,6 +57,10 @@ def gen_base_communication() -> tuple[list[int], list[list[list[int]]]]:
 
 
 def gen_pods(num: int) -> ([], []):
+    if num < 0:
+        raise ValueError("Pod 数量不能为负数")
+    if num == 0:
+        return [], [], []
     pod_types = 4
     command_child_nums = 3  # 指挥关系 n 叉树
 
@@ -85,7 +90,7 @@ def gen_pods(num: int) -> ([], []):
     platform = []
     platform_idx = 0
 
-    def gen_one_platform(parent: BasePlatform) -> BasePlatform:
+    def gen_one_platform(parent: BasePlatform, max_pods: int) -> BasePlatform:
         nonlocal communication_type_idx
         nonlocal communication_type
         nonlocal platform
@@ -94,6 +99,9 @@ def gen_pods(num: int) -> ([], []):
         nonlocal pods_type_idx
         nonlocal pods_type
         nonlocal command_communication
+        pod_count = min(len(pods_type_idx), max_pods)
+        if pod_count <= 0:
+            raise ValueError("平台至少需要生成一个 Pod")
         # 生成新的 platform
         p = BasePlatform(f'platform-{platform_idx + 1}')
         platform_idx += 1
@@ -107,13 +115,14 @@ def gen_pods(num: int) -> ([], []):
         pod_idx += 1
         pod.platform = p.name
         pod_list = [pod]
+        p.add_pod(pod)
         # 生成parent最后一个pod到新的第一个pod的通信
         comm_list = []
         if parent is not None:
             comm = Communication(parent.pods[-1].name, pod.name, *command_communication)
             comm_list.append(comm)
         # 生成其余的pod
-        for i in range(1, len(pods_type_idx)):
+        for i in range(1, pod_count):
             # 创建 pod
             pod = copy.copy(pods_type[i][pods_type_idx[i]])
             pod.name = f"pod-{pod_idx + 1}"
@@ -133,20 +142,22 @@ def gen_pods(num: int) -> ([], []):
         return p
 
     q = queue.Queue()
-    root = gen_one_platform(None)
+    root = gen_one_platform(None, num)
     q.put(root)
     while pod_idx < num:
         parent = q.get()
         for i in range(command_child_nums):
-            child = gen_one_platform(parent)
+            child = gen_one_platform(parent, num - pod_idx)
             q.put(child)
-            if pod_idx > num:
+            if pod_idx >= num:
                 break
 
     return pods, communication, platform
 
 
 def gen_nodes(num: int, gpu_num: int) -> [BaseNode]:
+    if num < 0 or gpu_num < 0:
+        raise ValueError("节点数量不能为负数")
     node_types = gen_base_nodes()
     nodes = [
         # BaseNode("pasak8s-14", 64, 1024 * 1024, 0, 1.5 * 1024 * 1024, 10000),  #
@@ -175,6 +186,7 @@ def save_communication(connections: list[Communication], save_path: str):
     :return
     save_path/communication.yaml
     """
+    os.makedirs(save_path, exist_ok=True)
     data = [con.get_data() for con in connections]
     df = pd.DataFrame(data, columns=Communication.get_columns())
     df.to_csv(f"{save_path}/communication.csv", index=False)
@@ -187,6 +199,7 @@ def save_resource(pods: list[BasePod], nodes: list[BaseNode], platforms: list[Ba
     save_path/pods.csv
     save_path/nodes.csv
     """
+    os.makedirs(save_path, exist_ok=True)
     data = [pod.get_data() for pod in pods]
     df = pd.DataFrame(data, columns=BasePod.get_columns())
     df.to_csv(f"{save_path}/pods.csv", index=False)
