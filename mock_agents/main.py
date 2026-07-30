@@ -1,10 +1,13 @@
 import argparse
-import logging
-import agent
 import signal
 
+try:
+    from .agent import Agent
+except ImportError:
+    from agent import Agent
 
-if __name__ == "__main__":
+
+def main():
     parser = argparse.ArgumentParser(description='please enter the configuration of the intelligent agent')
 
     parser.add_argument('-c', '--cores', type=int, default=1, help='please enter CPU usage(core)')
@@ -19,10 +22,15 @@ if __name__ == "__main__":
     print(f'init args: {args}')
     print("start to init the agent")
 
-    my_agent = agent.Agent(args.cores, args.memory, args.frequency, args.package, args.target, args.amount)
+    my_agent = Agent(args.cores, args.memory, args.frequency, args.package, args.target, args.amount)
 
     signal.signal(signal.SIGTERM, my_agent.stop)
+    signal.signal(signal.SIGINT, my_agent.stop)
 
     my_agent.run()
 
     print("end the agent")
+
+
+if __name__ == "__main__":
+    main()

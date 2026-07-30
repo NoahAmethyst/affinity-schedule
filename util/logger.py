@@ -2,14 +2,16 @@ import logging
 import sys
 import coloredlogs
 
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(name='affinity-schedule')
-coloredlogs.install(logger=logger)
 logger.propagate = False
 
+
 def init_logger():
+    if any(getattr(handler, "_affinity_schedule_handler", False) for handler in logger.handlers):
+        return logger
+
     ## Setup logger color
-    coloredFormatter = coloredlogs.ColoredFormatter(
+    colored_formatter = coloredlogs.ColoredFormatter(
         fmt='[%(name)s] %(asctime)s %(funcName)s %(lineno)-3d  %(message)s',
         level_styles=dict(
             debug=dict(color='white'),
@@ -27,10 +29,12 @@ def init_logger():
     )
 
     ## Setup logger streamHandler
-    ch = logging.StreamHandler(stream=sys.stdout)
-    ch.setFormatter(fmt=coloredFormatter)
-    logger.addHandler(hdlr=ch)
+    console_handler = logging.StreamHandler(stream=sys.stdout)
+    console_handler.setFormatter(fmt=colored_formatter)
+    console_handler._affinity_schedule_handler = True
+    logger.addHandler(hdlr=console_handler)
     logger.setLevel(level=logging.DEBUG)
+    return logger
 
 # log to file
     # file_handler = logging.FileHandler('app.log')

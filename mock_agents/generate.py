@@ -1,222 +1,250 @@
-import csv
 import argparse
+from contextlib import contextmanager
+import csv
+from dataclasses import dataclass
 import logging
+from pathlib import Path
+
+import yaml
 
 
+AGENT_IMAGE = "registry.cn-hangzhou.aliyuncs.com/lexmargin/agent:v0.5"
+
+
+@dataclass
 class Agent:
-    def __init__(self, name: str, cpus: int, memory: int, gpus: int, disk: int) -> None:
-        self.name = name
-        self.cpus = cpus
-        self.memory = memory
-        self.gpus = gpus
-        self.disk = disk
-        self.target = ""
-        self.frequency = 1.0
-        self.package = 1
-        self.amount = 1
-        self.node = ""
+    name: str
+    cpus: int
+    memory: int
+    gpus: int
+    disk: int
+    target: str = ""
+    frequency: float = 1.0
+    package: int = 1
+    amount: int = 1
+    node: str = ""
 
 
 def init_logger() -> logging.Logger:
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
-
-    # log to console
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
-    # log to file
-    # file_handler = logging.FileHandler('app.log')
-    # file_handler.setLevel(logging.DEBUG)
-    # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    # file_handler.setFormatter(formatter)
-    # logger.addHandler(file_handler)
-
+    if not logger.handlers:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.DEBUG)
+        console_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+        logger.addHandler(console_handler)
     return logger
 
 
-def read_csv_and_construct_agents(resource_file: str, node_file: str) -> dict[str, Agent]:
-    agents_dict = {}
-    with open(resource_file, 'r', newline='') as csvfile:
-        reader = csv.reader(csvfile)
-        headers = next(reader)  # 读取列名，这里假设第一行是列名，跳过这一行
-
-        for row in reader:
-            name = row[0]
-            cpus = int(row[1]) if row[1] else 0  # 转换为整数，若为空则设为0
-            memory = int(row[2]) if row[2] else 0
-            gpus = int(row[3]) if row[3] else 0
-            disk = int(row[4]) if row[4] else 0
-
-            agent_obj = Agent(name, cpus, memory, gpus, disk)
-            agents_dict[name] = agent_obj
-
-    with open(node_file, 'r', newline='') as csvfile:
-        reader = csv.reader(csvfile)
-        headers = next(reader)  # 读取列名，这里假设第一行是列名，跳过这一行
-
-        for row in reader:
-            name = row[0]
-            node = row[1]
-
-            if agents_dict[name] == None:
-                logger.error(f'pod {name} dose not exist!')
-
-            agents_dict[name].node = node
-
-    return agents_dict
+@contextmanager
+def _dict_reader(path: str | Path, required_columns: set[str]):
+    with open(path, "r", newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        missing = required_columns.difference(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"CSV 文件 {path} 缺少列: {', '.join(sorted(missing))}")
+        yield reader
 
 
-# def read_csv_and_generate_yamls(logger:logging.Logger, agents:dict[str, Agent], comm_file:str, out_file:str)->None:
-#     generated = set()
-#     with open(out_file, 'w') as outfile:
-#         with open(comm_file, 'r', newline='') as csvfile:
-#             reader = csv.reader(csvfile)
-#             headers = next(reader)  # 读取列名，这里假设第一行是列名，跳过这一行
+def read_csv_and_construct_agents(
+    resource_file: str | Path,
+    node_file: str | Path,
+) -> dict[str, Agent]:
+    agents: dict[str, Agent] = {}
+    with _dict_reader(
+        resource_file,
+        {"name", "cpu", "memory", "gpu", "disk"},
+    ) as reader:
+        for line_number, row in enumerate(reader, start=2):
+            name = row["name"]
+            if not name:
+                raise ValueError(f"资源文件第 {line_number} 行名称为空")
+            if name in agents:
+                raise ValueError(f"资源文件包含重复智能体: {name}")
+            try:
+                values = [
+                    int(row[column] or 0)
+                    for column in ("cpu", "memory", "gpu", "disk")
+                ]
+            except ValueError as exc:
+                raise ValueError(f"资源文件第 {line_number} 行包含非法数值") from exc
+            if min(values) < 0:
+                raise ValueError(f"资源文件第 {line_number} 行包含负资源需求")
+            agents[name] = Agent(name, *values)
 
-#             for row in reader:
-#                 source, target, frequency, package, amount = row[0], row[1], float(row[2]) if row[2] else 0.0, int(row[3]) if row[3] else 0, int(row[4]) if row[4] else 0
-#                 if frequency == 0 or package == 0 or amount == 0:
-#                     logger.warning(f'some parameters are illegal: frequency: {frequency}, package: {package}, amount: {amount}!')
-#                     continue
+    assigned = set()
+    with _dict_reader(node_file, {"name", "node"}) as reader:
+        for line_number, row in enumerate(reader, start=2):
+            name = row["name"]
+            if name not in agents:
+                raise ValueError(
+                    f"部署文件第 {line_number} 行引用了不存在的智能体: {name}"
+                )
+            if name in assigned:
+                raise ValueError(f"部署文件包含重复智能体: {name}")
+            if not row["node"]:
+                raise ValueError(f"部署文件第 {line_number} 行节点名称为空")
+            agents[name].node = row["node"]
+            assigned.add(name)
+    missing_assignments = sorted(set(agents).difference(assigned))
+    if missing_assignments:
+        raise ValueError(f"以下智能体没有节点分配: {missing_assignments}")
+    return agents
 
-#                 if source in generated:
-#                     logger.warning(f'{source} has been used before!')
-#                     continue
 
-#                 if agents[source] == None or agents[target] == None:
-#                     logger.warning(f'{source} or {target} is not defined in pods resource configuration file before!')
-#                     continue
-
-#                 agents[source].target = target
-#                 agents[source].frequency = frequency
-#                 agents[source].package = package
-#                 agents[source].amount = amount
-#                 outfile.write(generate_yamls(source, agents[source].cpus, agents[source].memory, frequency, package, target, amount))
-#                 generated.add(source)
-
-def read_csv_and_generate_yamls(logger: logging.Logger, agents: dict[str, Agent], comm_file: str,
-                                out_file: str) -> None:
-    generated = set()
-    with open(comm_file, 'r', newline='') as csvfile:
-        reader = csv.reader(csvfile)
-        next(reader)  # 假设第一行是列名，跳过这一行
-
-        for row in reader:
-            target, source, frequency, package, amount = row[0], row[1], float(row[2]) if row[2] else 0.0, int(
-                row[3]) if row[3] else 0, int(row[4]) if row[4] else 0
-            if frequency == 0 or package == 0 or amount == 0:
-                logger.warning(
-                    f'some parameters are illegal: frequency: {frequency}, package: {package}, amount: {amount}!')
-                continue
-
-            if source in generated:
-                if 'command' in source and 'equipt' in target:
-                    temp = source
-                    source = target
-                    target = temp
-                else:
-                    logger.warning(f'{source} has been used before!')
-                    continue
-
-            if agents[source] is None or agents[target] is None:
-                logger.warning(f'{source} or {target} is not defined in pods resource configuration file before!')
+def read_csv_and_generate_yamls(
+    logger: logging.Logger,
+    agents: dict[str, Agent],
+    comm_file: str | Path,
+    out_file: str | Path,
+) -> None:
+    generated_sources = set()
+    with _dict_reader(
+        comm_file,
+        {"source", "target", "frequency", "package", "count"},
+    ) as reader:
+        for line_number, row in enumerate(reader, start=2):
+            source = row["source"]
+            target = row["target"]
+            if source not in agents or target not in agents:
+                missing = [name for name in (source, target) if name not in agents]
+                raise ValueError(
+                    f"通信文件第 {line_number} 行引用了不存在的智能体: {missing}"
+                )
+            try:
+                frequency = float(row["frequency"])
+                package = int(row["package"])
+                amount = int(row["count"])
+            except ValueError as exc:
+                raise ValueError(f"通信文件第 {line_number} 行包含非法数值") from exc
+            if frequency <= 0 or package <= 0 or amount <= 0:
+                raise ValueError(f"通信文件第 {line_number} 行的通信参数必须大于 0")
+            if source in generated_sources:
+                logger.warning(f"智能体 {source} 存在多个通信目标，仅保留第一个")
                 continue
 
             agents[source].target = target
             agents[source].frequency = frequency
             agents[source].package = package
             agents[source].amount = amount
-            generated.add(source)
-
-    generate(logger, agents, out_file)
-
-
-def generate(logger: logging.Logger, agents: dict[str, Agent], out_file: str) -> None:
-    with open(out_file, 'w') as outfile:
-        for agent in agents.values():
-            outfile.write(
-                generate_yamls(agent.name.replace('_', '-'), agent.cpus, agent.memory, agent.frequency, agent.package,
-                               agent.target.replace('_', '-'), agent.amount, agent.node))
+            generated_sources.add(source)
+    generate(agents, out_file)
 
 
-def generate_yamls(name: str, cpu: int, memory: int, frequency: float, package: int, target: str, amount: int,
-                   node: str) -> str:
-    return f"""
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: {name}
-  labels:
-    app: {name}
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: {name}
-  template:
-    metadata:
-      name: {name}
-      labels:
-        app: {name}
-    spec:
-      nodeSelector:
-        agent: {node}
-      containers:
-        - name: {name}
-          image: registry.cn-hangzhou.aliyuncs.com/lexmargin/agent:v0.5
-          command: ["python3", "/agent/main.py", "-c", "{cpu}", "-m", "{memory}", "-f", "{frequency}", "-p", "{package}", "-t", "{target}", "-a", "{amount}"]
-          ports:
-          - containerPort: 11111
-          - containerPort: 11112
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {name}
-  labels:
-    app: agents
-spec:
-  selector:
-    app: {name}
-  ports:
-    - protocol: TCP
-      port: 11111  # 对外提供服务的端口，可以根据实际需求修改
-      targetPort: 11111  # Pod 内实际监听的端口，要和 Pod 中应用监听的端口对应
-      name: server
-    - protocol: TCP
-      port: 11112  # 对外提供服务的端口，可以根据实际需求修改
-      targetPort: 11112  # Pod 内实际监听的端口，要和 Pod 中应用监听的端口对应
-      name: metrics
-  type: ClusterIP  # 服务类型，这里使用 ClusterIP，可根据需求换成其他类型（如 NodePort、LoadBalancer 等）""".format(name,
-                                                                                                               cpu,
-                                                                                                               memory,
-                                                                                                               frequency,
-                                                                                                               package,
-                                                                                                               target,
-                                                                                                               amount)
+def generate(agents: dict[str, Agent], out_file: str | Path) -> None:
+    documents = []
+    for agent in agents.values():
+        documents.extend(generate_resources(agent))
+    output = Path(out_file)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with open(output, "w", encoding="utf-8") as outfile:
+        yaml.safe_dump_all(
+            documents,
+            outfile,
+            explicit_start=True,
+            sort_keys=False,
+            allow_unicode=True,
+        )
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='please enter the configuration of the intelligent agent')
+def generate_resources(agent: Agent) -> list[dict]:
+    name = agent.name.replace("_", "-")
+    target = agent.target.replace("_", "-")
+    requests = {
+        "cpu": str(agent.cpus),
+        "memory": f"{agent.memory}Gi",
+        "ephemeral-storage": f"{agent.disk}Mi",
+    }
+    if agent.gpus:
+        requests["nvidia.com/gpu"] = str(agent.gpus)
 
-    parser.add_argument('-p', '--pods', type=str, help='please enter the file name of pods resource configuration')
-    parser.add_argument('-c', '--communication', type=str,
-                        help='please enter the file name of communication configuration')
-    parser.add_argument('-n', '--nodename', type=str,
-                        help='please enter the file name of deployment node configuration')
-    parser.add_argument('-o', '--output', type=str, help='please enter the file name of output yamls')
+    deployment = {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {"name": name, "labels": {"app": name}},
+        "spec": {
+            "replicas": 1,
+            "selector": {"matchLabels": {"app": name}},
+            "template": {
+                "metadata": {"name": name, "labels": {"app": name}},
+                "spec": {
+                    "nodeSelector": {"agent": agent.node},
+                    "containers": [
+                        {
+                            "name": name,
+                            "image": AGENT_IMAGE,
+                            "command": [
+                                "python3",
+                                "/agent/main.py",
+                                "-c",
+                                str(agent.cpus),
+                                "-m",
+                                str(agent.memory),
+                                "-f",
+                                str(agent.frequency),
+                                "-p",
+                                str(agent.package),
+                                "-t",
+                                target,
+                                "-a",
+                                str(agent.amount),
+                            ],
+                            "resources": {
+                                "requests": requests,
+                                "limits": requests.copy(),
+                            },
+                            "ports": [
+                                {"containerPort": 11111},
+                                {"containerPort": 11112},
+                            ],
+                        }
+                    ],
+                },
+            },
+        },
+    }
+    service = {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {"name": name, "labels": {"app": "agents"}},
+        "spec": {
+            "selector": {"app": name},
+            "ports": [
+                {
+                    "protocol": "TCP",
+                    "port": 11111,
+                    "targetPort": 11111,
+                    "name": "server",
+                },
+                {
+                    "protocol": "TCP",
+                    "port": 11112,
+                    "targetPort": 11112,
+                    "name": "metrics",
+                },
+            ],
+            "type": "ClusterIP",
+        },
+    }
+    return [deployment, service]
 
+
+def main():
+    parser = argparse.ArgumentParser(description="生成模拟智能体 Kubernetes 资源")
+    parser.add_argument("-p", "--pods", required=True, type=Path)
+    parser.add_argument("-c", "--communication", required=True, type=Path)
+    parser.add_argument("-n", "--nodename", required=True, type=Path)
+    parser.add_argument("-o", "--output", required=True, type=Path)
     args = parser.parse_args()
 
     logger = init_logger()
-    logger.info(f'init args: {args}')
-    logger.info("start to generate the agents")
+    logger.info(f"init args: {args}")
     agents = read_csv_and_construct_agents(args.pods, args.nodename)
-    logger.info(f'init the agents source usage successfully')
     read_csv_and_generate_yamls(logger, agents, args.communication, args.output)
     logger.info("finish generate yamls successfully")
+
+
+if __name__ == "__main__":
+    main()
