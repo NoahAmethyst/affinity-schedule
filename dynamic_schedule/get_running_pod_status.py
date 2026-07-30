@@ -1,32 +1,46 @@
-import csv
 import argparse
+import csv
+from pathlib import Path
+
+
+def _pod_sort_key(name: str):
+    prefix, separator, suffix = name.rpartition("-")
+    if separator and suffix.isdigit():
+        return prefix, int(suffix)
+    return name, 0
+
+
+def group_running_pods(input_path: str | Path, output_path: str | Path):
+    node_pods: dict[str, list[str]] = {}
+    with open(input_path, "r", newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        required_columns = {"name", "node"}
+        missing = required_columns.difference(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"调度结果缺少列: {', '.join(sorted(missing))}")
+        for line_number, row in enumerate(reader, start=2):
+            pod = row["name"]
+            node = row["node"]
+            if not pod or not node:
+                raise ValueError(f"调度结果第 {line_number} 行的 Pod 或节点名称为空")
+            node_pods.setdefault(node, []).append(pod)
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with open(output, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["node", "agents"])
+        for node, pods in node_pods.items():
+            writer.writerow([node, ",".join(sorted(pods, key=_pod_sort_key))])
+
+
+def main():
+    parser = argparse.ArgumentParser(description="汇总节点上正在运行的 Pod")
+    parser.add_argument("-i", "--input", required=True, type=Path)
+    parser.add_argument("-o", "--output", required=True, type=Path)
+    args = parser.parse_args()
+    group_running_pods(args.input, args.output)
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='please enter the deployment of running pods')
-
-    parser.add_argument('-i', '--input', type=str, help='please enter the file path of deployment')
-    parser.add_argument('-o', '--output', type=str, help='please enter the file path of output')
-
-    node_pods = {}
-    args = parser.parse_args()
-    with open(args.input, 'r', newline='') as csvfile:
-        reader = csv.reader(csvfile)
-        headers = next(reader)  # 读取列名，这里假设第一行是列名，跳过这一行
-
-        for row in reader:
-            pod, node = row[0], row[1]
-
-            if node not in  node_pods:
-                node_pods[node] = [pod]
-            else:
-                node_pods[node].append(pod)
-    
-    res = "node,agents\n"
-    for k, v in node_pods.items():
-        agents = ",".join(sorted(v, key=lambda x: int(x.split('-')[1])))
-        res += f"{k},\"{agents}\"\n"  # 添加换行符作为每次累加的分隔符
-
-    print(res)
-    with open(args.output, 'w', encoding='utf-8') as file:
-        file.write(res)
-
+    main()

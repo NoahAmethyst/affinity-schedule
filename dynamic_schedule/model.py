@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -7,39 +8,39 @@ import numpy as np
 
 # 自定义一个简单环境示例（仅用于演示，实际可替换为真实环境）
 class TrainEnv:
-    def __init__(self):
+    def __init__(self, episode_length=20):
         self.n = 8
-        self.state = self.generate_state()  
+        self.episode_length = episode_length
+        self.current_step = 0
+        self.state = self.generate_state()
         self.done = False
         print('加载历史数据，构建训练环境')
 
-
-
     def reset(self):
+        self.current_step = 0
         self.state = self.generate_state()
         self.done = False
         return self.state
 
-    # @Todo 动作与奖励：哪些动作哪些奖励
     def step(self, action):
-        # 这里简单模拟状态变化、奖励和结束条件，实际需按真实逻辑定义
-        self.state = self.generate_state()
-        if action == 0:
-            reward = np.random.rand() * 0.5  # 假设动作0对应较低奖励范围
+        state = self.state.reshape(self.n, 3)
+        feasible = state[:, 0] > 0
+        if not feasible.any():
+            reward = -1.0
         else:
-            reward = np.random.rand() * 1.5  # 假设动作1对应较高奖励范围
-        
-        if np.random.rand() > 0.9:
-            self.done = True
+            score_column = 2 if action == 0 else 1
+            reward = float(np.max(state[feasible, score_column]))
 
+        self.current_step += 1
+        self.done = self.current_step >= self.episode_length
+        self.state = self.generate_state()
         return self.state, reward, self.done, {}
 
-    # @Todo 状态空间
     def generate_state(self):
         state = np.zeros((self.n, 3))
 
         for i in range(self.n):
-            state[i][0] = np.random.randint(0,2)
+            state[i][0] = np.random.randint(0, 2)
             state[i][1] = np.random.rand()
 
             if state[i][0] == 1:
@@ -85,6 +86,7 @@ class ReplayBuffer:
 class DQN(nn.Module):
     def __init__(self, n):
         super(DQN, self).__init__()
+        self.input_nodes = n
         self.fc1 = nn.Linear(3 * n, 128)  # 根据输入特征数量调整输入层节点数
         self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, 2)  # 明确输出层节点数为2，对应2个动作
@@ -96,7 +98,8 @@ class DQN(nn.Module):
         return x
 
     def get_action(self, x)->int:
-        return self(x).argmax().item()
+        with torch.no_grad():
+            return self(x).argmax().item()
 
 
 if __name__ == "__main__":
@@ -138,7 +141,6 @@ if __name__ == "__main__":
                     q_values = policy_net(state_tensor)
                     action = q_values.argmax().item()
             else:
-                # @Todo 选择动作策略
                 action = np.random.choice(2)  # 从2个动作中随机选择
 
             next_state, reward, done, _ = env.step(action)
@@ -202,12 +204,13 @@ if __name__ == "__main__":
 
     # 保存模型
     print('测试结束，保存模型')
-    torch.save(policy_net.state_dict(), 'model.pth')
+    model_path = Path(__file__).with_name("model.pth")
+    torch.save(policy_net.state_dict(), model_path)
     
     # 加载模型
     print('模型结构：')
     model = DQN(env.n)
-    model.load_state_dict(torch.load('model.pth'))
+    model.load_state_dict(torch.load(model_path, map_location="cpu"))
     state = env.reset()
     state = torch.FloatTensor(state)
     print(model(state))
